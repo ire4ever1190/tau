@@ -29,10 +29,8 @@ proc createConfig*(): ConfigStrong {.importc: "ulCreateConfig".}
 # View
 #
 proc loadURL*(view: View, url: ULString) {.importc: "ulViewLoadURL".}
-
-
-proc title*(view: ViewWeak): ULStringWeak {.importc: "ulViewGetTitle".}
-proc title*(view: ViewStrong): ULStringWeak {.importc: "ulViewGetTitle".}
+proc title*(view: View): ULStringWeak {.importc: "ulViewGetTitle".}
+proc url*(view: View): ULStringWeak {.importc: "ulViewGetURL".}
 
 {.pop.}
 
