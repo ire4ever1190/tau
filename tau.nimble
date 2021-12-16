@@ -10,4 +10,4 @@ srcDir        = "src"
 # Dependencies
 
 requires "nim >= 1.4.0"
-requires "ptr_math >= 0.3.0 & ptr_math <= 0.4.0"
+requires "ptr_math >= 0.3.0 & < 0.4.0"
