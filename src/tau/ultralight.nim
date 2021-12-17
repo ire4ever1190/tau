@@ -5,6 +5,11 @@ import ptr_math
 
 const headerFile = "<Ultralight/CAPI.h>"
 
+when defined(windows):
+  type ULFileHandle = distinct csize_t
+else:
+  type ULFileHandle = distinct cint
+
 type
   Rect* {.bycopy.} = object
     left*: cfloat
@@ -29,6 +34,11 @@ type
     uv_coords*: Rect
     render_buffer_id*: cuint
 
+  LogLevel* = enum
+    Error = 0
+    Warning
+    Info
+
   Surface*     = distinct ULPtr
   BitmapSurface* = distinct Surface
   
@@ -50,8 +60,12 @@ type
   WindowObjectReadyCallback* = proc (data: pointer, caller: ViewWeak, frameID: culonglong, mainFrame: bool, url: ULStringWeak) {.nimcall.}
   DOMReadyCallback*          = proc (data: pointer, caller: ViewWeak, frameID: culonglong, mainFrame: bool, url: ULStringWeak) {.nimcall.}
   UpdateHistoryCallback*     = proc (data: pointer, caller: ViewWeak) {.nimcall.}
-  
+  LoggerMessageCallback*     = proc (logLevel: LogLevel, msg: ULStringWeak) {.nimcall.}
 {.pop.}
+
+type
+  ULLogger {.importc, header: headerFile.} = object
+    log_message: LoggerMessageCallback
 
 {.push dynlib: DLLUltraLight, header: headerFile.}
 
@@ -230,6 +244,16 @@ proc id*(session: Session): culonglong {.importc: "ulSessionGetId".}
 proc diskPath*(session: Session): ULStringWeak {.importc: "ulSessionGetDiskPath".}
 
 #
+# File System
+#
+
+#
+# Platform
+#
+
+proc setDefaultLogger*(logger: ULLogger) {.importc: "ulPlatformSetLogger".}
+
+#
 # ViewConfig
 #
 
@@ -254,4 +278,12 @@ proc `$`*(str: ULString): string =
   for i in 0..<str.len:
     result &= chr(data[])
     data += 1
-    
+
+proc echoLog(x: LogLevel, y: ULString) {.cdecl.} = 
+  echo x, ": ", y
+
+
+
+let echoLogger* = ULLogger(
+  log_message: echoLog
+)

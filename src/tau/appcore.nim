@@ -20,7 +20,7 @@ type
 
 
 proc createSettings*(): SettingsStrong {.importc: "ulCreateSettings".}
-proc `cpuRender=`*(settings: Settings, forceCPU: bool) {.importc: "ulSettingsSetForceCPURenderer".}
+proc `forceCPU=`*(settings: Settings, forceCPU: bool) {.importc: "ulSettingsSetForceCPURenderer".}
 proc `developerName=`*(settings: Settings, name: ULString) {.importc: "ulSettingsSetDeveloperName".}
 proc `appName=`*(settings: Settings, name: ULString) {.importc: "ulSettingsSetAppName".}
 proc `fileSystemPath=`*(settings: Settings, path: ULString) {.importc: "ulSettingsSetFileSystemPath".}
