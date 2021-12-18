@@ -20,8 +20,8 @@ type
 
 
 proc createSettings*(): SettingsStrong {.importc: "ulCreateSettings".}
-proc `forceCPU=`*(settings: Settings, forceCPU: bool) {.importc: "ulSettingsSetForceCPURenderer".}
 proc `developerName=`*(settings: Settings, name: ULString) {.importc: "ulSettingsSetDeveloperName".}
+proc `forceCPU=`*(settings: Settings, forceCPU: bool) {.importc: "ulSettingsSetForceCPURenderer".}
 proc `appName=`*(settings: Settings, name: ULString) {.importc: "ulSettingsSetAppName".}
 proc `fileSystemPath=`*(settings: Settings, path: ULString) {.importc: "ulSettingsSetFileSystemPath".}
 proc `loadShadersFromFS=`*(settinsg: Settings, enabled: bool) {.importc: "ulSettingsSetLoadShadersFromFileSystem".}
@@ -33,11 +33,11 @@ proc `loadShadersFromFS=`*(settinsg: Settings, enabled: bool) {.importc: "ulSett
 proc createApp*(settings: Settings, config: Config): AppStrong {.importc: "ulCreateApp".}
 proc run*(app: App) {.importc: "ulAppRun".}
 proc mainMonitor*(app: App): MonitorStrong {.importc: "ulAppGetMainMonitor".}
-proc `window=`*(app: App, window: Window) {.importc: "ulAppSetWindow".}
 proc setUpdateCallback*(app: App, callback: UpdateCallback, data: pointer) {.importc: "ulAppSetUpdateCallback".}
 proc isRunning*(app: App): bool {.importc: "ulAppIsRunning".}
 proc renderer*(app: App): RendererWeak {.importc: "ulAppGetRenderer".}
 proc quit*(app: App) {.importc: "ulAppQuit".}
+proc `window=`*(app: App, window: Window) {.importc: "ulAppSetWindow".}
 
 #
 # Monitor

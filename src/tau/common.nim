@@ -94,12 +94,37 @@ type
 
   BitmapFormat* = enum
     A8_UNORM
+    ##
+    ## Alpha channel only, 8-bits per pixel.
+    ##
+    ## Encoding: 8-bits per channel, unsigned normalized.
+    ##
+    ## Color-space: Linear (no gamma), alpha-coverage only.
+    ##
     A8_UNORM_SRGB
-
+    ##
+    ## Blue Green Red Alpha channels, 32-bits per pixel.
+    ## 
+    ## Encoding: 8-bits per channel, unsigned normalized.
+    ##
+    ## Color-space: sRGB gamma with premultiplied linear alpha channel.
+    ##
   KeyEventType* = enum
     KeyDown
-    KeyUp
-    RawKeyDown
+    ##
+    ## Key-Down event type. (Does not trigger accelerator commands in WebCore)
+    ##
+    ## Note: You should probably use RawKeyDown instead when a physical key
+    ##        is pressed. This member is only here for historic compatibility
+    ##        with WebCore's key event types.
+    ##
+    KeyUp 
+    ## Key-Up event type. Use this when a physical key is released.
+    RawKeyDown 
+    ## Raw Key-Down type. Use this when a physical key is pressed.
+    ##
+    ## Note: You should use RawKeyDown for physical key presses since it
+    ##        allows WebCore to do additional command translation.
     Char
 
   MouseEventType* = enum
@@ -123,14 +148,28 @@ type
 
   FontHinting* = enum
     Smooth
+    ##
+    ## Lighter hinting algorithm-- glyphs are slightly fuzzier but better
+    ## resemble their original shape. This is achieved by snapping glyphs to the
+    ## pixel grid only vertically which better preserves inter-glyph spacing.
+    ##
     Normal
+    ##
+    ## Default hinting algorithm-- offers a good balance between sharpness and
+    ## shape at smaller font sizes.
+    ##
     Monochrome
-
-  JSContextRef      = distinct JSPtr
-  JSValueRef        = distinct JSPtr
-  JSObjectRef       = distinct JSPtr
-  JSStringRef       = distinct JSPtr
-  JSClassDefinition = distinct JSPtr
+    ##
+    ## Strongest hinting algorithm-- outputs only black/white glyphs. The result
+    ## is usually unpleasant if the underlying TTF does not contain hints for
+    ## this type of rendering.
+    ##
+    
+  JSContextRef*      = distinct JSPtr
+  JSValueRef*        = distinct JSPtr
+  JSObjectRef*       = distinct JSPtr
+  JSStringRef*       = distinct JSPtr
+  JSClassDefinition* = distinct JSPtr
   
   
 
@@ -188,6 +227,8 @@ macro importDestructor(kind: untyped, dll: string) =
   result = quote do:
     proc destroy*(`loweredName`: `kind`) {.cdecl, importc: `cName`, dynlib: `dll`.}
     proc `destructorName`*(`loweredName`: var `kind`) =
+      when defined(logULDestroys):
+        echo "Destroying: ", astToStr(`kind`) 
       if `loweredName`.pointer != nil:
         destroy `loweredName`
         `loweredName` = nil    
@@ -202,5 +243,6 @@ importDestructor(SessionStrong, DLLUltraLight)
 importDestructor(ViewConfigStrong, DLLUltraLight)
 importDestructor(BitmapStrong, DLLUltraLight)
 importDestructor(KeyEventStrong, DLLUltraLight)
-importDestructor(MouseEventStrong, DllUltraLight)
-importDestructor(ScrollEventStrong, DllUltraLight)
+importDestructor(RendererStrong, DLLUltraLight)
+importDestructor(MouseEventStrong, DLLUltraLight)
+importDestructor(ScrollEventStrong, DLLUltraLight)
