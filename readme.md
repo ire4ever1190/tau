@@ -2,7 +2,7 @@
 
 Under construction, please come back in a week or 2
 
-
+[Docs available here](https://tempdocs.netlify.app/tau/stable/tau.html)
 
 # Licensing
 While this repo is MIT licensed, [Ultralight](https://ultralig.ht/) is not. 
