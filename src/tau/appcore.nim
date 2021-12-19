@@ -135,9 +135,9 @@ proc setResizeCallback*(window: Window, callback: ResizeCallback, data: pointer)
   ##
   ## .. code-block:: nim
   ##
-  ## proc onResize(data: pointer, width, height: cuint) {.cdecl.}=
-  ##   cast[OverlayWeak](data).resize(width, height)
-  ## window.setResizeCallback(onResize, overlay.pointer)
+  ##   proc onResize(data: pointer, width, height: cuint) {.cdecl.}=
+  ##     cast[OverlayWeak](data).resize(width, height)
+  ##   window.setResizeCallback(onResize, overlay.pointer)
 proc setCloseCallback*(window: Window, callback: CloseCallback, data: pointer) {.importc: "ulWindowSetCloseCallback".}
   ## Set a callback to be notified when a window closes.
 proc moveTo*(window: Window, x, y: cint) {.importc: "ulWindowMoveTo".}
@@ -170,7 +170,8 @@ proc pixelsToScreen*(window: Window, val: cint) {.importc: "ulWindowPixelsToScre
 proc nativeHandle*(window: Window): pointer {.importc: "ulWindowGetNativeHandle".}
   ## Get the underlying native window handle.
   ##
-  ## .. Note:: This is:  - HWND on Windows
+  ## .. Note:: This is:  
+  ##                 - HWND on Windows
   ##                 - NSWindow* on macOS
   ##                 - GLFWwindow* on Linux
 proc `title=`*(window: Window, title: cstring) {.importc: "ulWindowSetTitle".}
@@ -196,6 +197,7 @@ proc createOverlay*(window: Window, width, height: cuint, x, y: cint): OverlaySt
   ##
   ## **y**       The y-position (offset from the top of the Window), in
   ##                 pixels.
+  ##
   ##
   ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should
   ##        create the Overlay then load content into the underlying View.
