@@ -89,7 +89,7 @@ type
     kMessageLevel_Info = 5
 
   BitmapFormat* = enum
-    A8_UNORM
+    ## **A8_UNORM**
     ##
     ## Alpha channel only, 8-bits per pixel.
     ##
@@ -97,7 +97,7 @@ type
     ##
     ## Color-space: Linear (no gamma), alpha-coverage only.
     ##
-    A8_UNORM_SRGB
+    ## **A8_UNORM_SRGB**
     ##
     ## Blue Green Red Alpha channels, 32-bits per pixel.
     ## 
@@ -105,22 +105,25 @@ type
     ##
     ## Color-space: sRGB gamma with premultiplied linear alpha channel.
     ##
+    A8_UNORM
+    A8_UNORM_SRGB
   KeyEventType* = enum
-    KeyDown
-    ##
-    ## Key-Down event type. (Does not trigger accelerator commands in WebCore)
+    ## * **KeyDown**: (Does not trigger accelerator commands in WebCore)
     ##
     ## Note: You should probably use RawKeyDown instead when a physical key
     ##        is pressed. This member is only here for historic compatibility
     ##        with WebCore's key event types.
     ##
-    KeyUp 
-    ## Key-Up event type. Use this when a physical key is released.
-    RawKeyDown 
-    ## Raw Key-Down type. Use this when a physical key is pressed.
+    ## * **KeyUp**: Use this when a physical key is released  
+    ## * **RawKeyDown** type. Use this when a physical key is pressed.
     ##
     ## Note: You should use RawKeyDown for physical key presses since it
     ##        allows WebCore to do additional command translation.
+    ##
+    ## * **Char**: Use this when the OS generates text from a physical key being pressed (eg, WM_CHAR on Windows).
+    KeyDown
+    KeyUp 
+    RawKeyDown 
     Char
 
   MouseEventType* = enum
@@ -143,18 +146,25 @@ type
     CounterClockwise
 
   FontHinting* = enum
-    Smooth
+    ## **Smooth**
+    ##
     ## Lighter hinting algorithm-- glyphs are slightly fuzzier but better
     ## resemble their original shape. This is achieved by snapping glyphs to the
     ## pixel grid only vertically which better preserves inter-glyph spacing.
-    Normal
+    ##
+    ## **Normal**
+    ##
     ## Default hinting algorithm-- offers a good balance between sharpness and
     ## shape at smaller font sizes.
-    Monochrome
+    ##
+    ## **Monochrome**
+    ##
     ## Strongest hinting algorithm-- outputs only black/white glyphs. The result
     ## is usually unpleasant if the underlying TTF does not contain hints for
     ## this type of rendering.
-    
+    Smooth
+    Normal
+    Monochrome
   
 
 macro importType(kind: untyped, name: static[string] = "") = 
@@ -165,7 +175,6 @@ macro importType(kind: untyped, name: static[string] = "") =
   ## Strong and Weak have respective prefixes (e.g. AppStrong, AppWeak) while Both has none (e.g. App)
   ## Using the both is fine for most cases for a parameter but the Weak and Strong types should be carefully choosen for each return type of
   ## a proc imported
-  echo name
   let 
     typeIdent = ident(if name == "":  replace($kind, "UL", "") else: name)
     strongIdent = ident $typeIdent & "Strong"

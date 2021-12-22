@@ -1,6 +1,6 @@
 import common
 
-{.passL: "WebCore".}
+{.passL: "-lWebCore".}
 
 type
   JSStruct* {.final, pure.} = object
@@ -34,15 +34,19 @@ type
   JSException*       = ptr JSValueRef
     ## Used to get the exception from a callback
   JSPropertyAttribute* {.pure.} = enum
-    None       ## Specifies that a property has no special attributes.
-    ReadOnly   ## Specifies that a property is read-only.
-    DontEnum   ## Specifies that a property should not be enumerated by JSPropertyEnumerators and JavaScript for...in loops.
-    DontDelete ## Specifies that the delete operation should fail on a property.
-
+    ## * **None**: Specifies that a property has no special attributes.
+    ## * **ReadOnly**: Specifies that a property is read-only.
+    ## * **DontEnum**: Specifies that a property should not be enumerated by JSPropertyEnumerators and JavaScript for...in loops.
+    ## * **DontDelete**: Specifies that the delete operation should fail on a property.
+    None       
+    ReadOnly  
+    DontEnum   
+    DontDelete 
   JSClassAttribute* {.pure.} = enum
-    None                 ## Specifies that a class has no special attributes.
-    NoAutomaticPrototype ## Specifies that a class should not automatically generate a shared prototype for its instance objects. Use kJSClassAttributeNoAutomaticPrototype in combination with JSObjectSetPrototype to manage prototypes manually.
-
+    ## * **None**: Specifies that a class has no special attributes. 
+    ## * **Specifies** that a class should not automatically generate a shared prototype for its instance objects. Use kJSClassAttributeNoAutomaticPrototype in combination with JSObjectSetPrototype to manage prototypes manually.
+    None                
+    NoAutomaticPrototype
 
 type
   ObjectInitalizeCallback* = proc (ctx: JSContextRef, obj: JSObjectRef) {.nimcall, cdecl.}
@@ -162,7 +166,6 @@ type
     ## Extension of JSObjectGetPropertyNamesCallback_ with the class that the method is being invoked for.
 
   JSObjectCallAsFunctionCallback* = proc (ctx: JSContextRef, function, this: JSObjectRef, argumentCount: csize_t, arguments: UncheckedArray[JSValueRef], exception: JSException): JSValueRef {.nimcall, cdecl}
-    ## **JSObjectCallAsFunctionCallback**:
     ## The callback invoked when an object is called as a function.
     ##
     ## If your callback were invoked by the JavaScript expression 'myObject.myFunction()', `function` would be set to myFunction, and `this` would be set to myObject.
@@ -234,20 +237,55 @@ type
     ## If this function returns false, the conversion request forwards to object's parent class chain (which includes the default object class).
     ## This function is only invoked when converting an object to number or string. An object converted to boolean is 'true.' An object converted to object is itself.
     ##
-    ## **ctx**: The execution context to use.
-    ##
-    ## **object**: The JSObject to convert.
-    ##
-    ## **type**: A JSType specifying the JavaScript **type**: to convert to.
-    ##
-    ## **exception**: A pointer to a JSValueRef in which to return an **exception**:, if any.
-    ##
-    ## **return**: The objects's converted value, or `nil` if the object was not converted.
+    ## * **ctx**: The execution context to use.
+    ## * **object**: The JSObject to convert.
+    ## * **type**: A JSType specifying the JavaScript **type**: to convert to.
+    ## * **exception**: A pointer to a JSValueRef in which to return an **exception**:, if any.
+    ## * **return**: The objects's converted value, or `nil` if the object was not converted.
 
   JSObjectConvertToTypeCallbackEx* = proc (ctx: JSContextRef, jsClass: JSClassRef, obj: JSObjectRef, kind: JSType, exception: JSException): JSValueRef {.nimcall, cdecl.}
     ## Extension of JSObjectConvertToTypeCallback_ with the class that the method is being invoked for.
     
+
+{.push header: "JavaScriptCore/JavaScript.h".}
+type
+  JSStaticValue* {.bycopy.} = object 
+    ## This structure describes a statically declared value property.
+    ##
+    ## * **name**: A null-terminated UTF8 string containing the property's **name**:.
+    ## * **getProperty**: A JSObjectGetPropertyCallback to invoke when getting the property's value.
+    ## * **setProperty**: A JSObjectSetPropertyCallback to invoke when setting the property's value. May be `nil` if the ReadOnly attribute is set.
+    ## * **attributes**: A bitset of JSPropertyAttribute_ to give to the property.
+    name*: cstring
+    getProperty*: JSObjectGetPropertyCallback
+    setProperty*: JSObjectSetPropertyCallback
+    attributes*: cint 
+
+  JSStaticValueEx* {.bycopy.} = object
+    ## Extension of JSStaticValue* for use with class version 1000
+    name*: cstring
+    getProperty*: JSObjectGetPropertyCallbackEx
+    setProperty*: JSObjectSetPropertyCallbackEx
+    attributes*: cuint 
+
+  JSStaticFunction* {.bycopy.} = object
+    ## This structure describes a statically declared function property.
+    ##
+    ## * **name**: A null-terminated UTF8 string containing the property's **name**:.
+    ## * **callAsFunction**: A JSObjectCallAsFunctionCallback to invoke when the property is called as a function.
+    ## * **attributes**: A logically ORed set of JSPropertyAttributes to give to the property.
+    name*: cstring
+    callAsFunction: JSObjectCallAsFunctionCallback
+    attributes*: cuint
+
+  JSStaticFunctionEx* {.bycopy.} = object
+    ## Extension of JSStaticFunction* for use with class version 1000
+    name*: cstring
+    callAsFunction: JSObjectCallAsFunctionCallbackEx
+    attributes*: cuint
     
+    
+{.pop.}    
 
 {.push header: "JavaScriptCore/JavaScript.h", dynlib: DLLWebCore.} # Think this is the right dynamic lib
 
@@ -261,22 +299,33 @@ proc evalScript*(ctx: JSContextRef, script: JSStringRef, this: JSObjectRef,
   ## `evalScript <ultralight.html#evalScript%2CView%2CULString%2Cptr.ULStringWeak>`_ Can be used instead to evaluate directly against a view
   ##
   ## **ctx**: The execution context to use.
+  ##
   ## **script**: A JSString containing the script to evaluate.
+  ##
   ## **this**: The object to use as "this," or `nil` to use the global object as "this".
+  ##
   ## **sourceURL**: A JSString containing a URL for the script's source file. This is used by debuggers and when reporting exceptions. Pass NULL if you do not care to include source file information.
+  ##
   ## **startLineNumber**: An integer value specifying the script's starting line number in the file located at `sourceURL`. This is only used when reporting exceptions. The value is one-based, so the first line is line 1 and invalid values are clamped to 1.
+  ##
   ## **exception**: A pointer to a JSValueRef in which to store an exception, if any. Pass **nil** if you do not care to store an exception.
-  ## **result**: The JSValue that results from evaluating script, or `nil` if an exception is thrown.
+  ##
+  ## **return**: The JSValue that results from evaluating script, or `nil` if an exception is thrown.
 
-proc checkScriptSyntax*(ctx: JSContextRef, script, sourceURL: JSStringRef, startLineNumer: cint, exception: ptr JSValueRef) {.importc: "JSCheckScriptSyntax".}
+proc checkScriptSyntax*(ctx: JSContextRef, script, sourceURL: JSStringRef, startLineNumer: cint, exception: ptr JSValueRef): bool {.importc: "JSCheckScriptSyntax".}
   ## Checks for syntax errors in a string of JavaScript.
   ##
   ## **ctx**: The execution context to use.
+  ##
   ## **script**: A JSString containing the **script** to check for syntax errors.
-  ## **sourceURL** A JSString containing a URL for the script's source file. This is only used when reporting exceptions. Pass `nil` if you do not care to include source file information in exceptions.
+  ##
+  ## **sourceURL**: A JSString containing a URL for the script's source file. This is only used when reporting exceptions. Pass `nil` if you do not care to include source file information in exceptions.
+  ##
   ## **startingLineNumber**: An integer value specifying the script's starting line number in the file located at sourceURL. This is only used when reporting exceptions. The value is one-based, so the first line is line 1 and invalid values are clamped to 1.
-  ## **exception**: A pointer to a JSValueRef in which to store a syntax error `exception`, if any. Pass `nil` if you do not care to store a syntax error `exception`.
-  ## **true**: if the script is syntactically correct, otherwise false.
+  ##
+  ## **exception**: A pointer to a JSValueRef in which to store a syntax error `exception`, if any. Pass `nil` if you do not care to store a syntax error exception.
+  ##
+  ## **return**: if the script is syntactically correct, otherwise false.
 
 proc garbageCollect*(ctx: JSContextRef) {.importc: "JSGarbageCollect".}
   ## Performs a JavaScript garbage collection.
