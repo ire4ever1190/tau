@@ -17,14 +17,10 @@ template cAPI(module: string): string =
   ## Returns relative path to cAPI header for certain module
   headerFolder / module / "CAPI.h"
 
-# How does this work without headers?
 
 type 
   ULStruct* {.final, pure.} = object
   ULPtr* = ptr ULStruct
-  
-  JSStruct* {.final, pure.} = object
-  JSPtr* = ptr JSStruct
   
   Cursor* = enum
     Pointer = 0
@@ -132,8 +128,8 @@ type
     MouseDown
     MouseUp
 
-  MouseButton* = enum
-    BtnNone = 0
+  MouseButton* {.pure.} = enum 
+    None = 0
     Left
     Middle
     Right
@@ -148,29 +144,17 @@ type
 
   FontHinting* = enum
     Smooth
-    ##
     ## Lighter hinting algorithm-- glyphs are slightly fuzzier but better
     ## resemble their original shape. This is achieved by snapping glyphs to the
     ## pixel grid only vertically which better preserves inter-glyph spacing.
-    ##
     Normal
-    ##
     ## Default hinting algorithm-- offers a good balance between sharpness and
     ## shape at smaller font sizes.
-    ##
     Monochrome
-    ##
     ## Strongest hinting algorithm-- outputs only black/white glyphs. The result
     ## is usually unpleasant if the underlying TTF does not contain hints for
     ## this type of rendering.
-    ##
     
-  JSContextRef*      = distinct JSPtr
-  JSValueRef*        = distinct JSPtr
-  JSObjectRef*       = distinct JSPtr
-  JSStringRef*       = distinct JSPtr
-  JSClassDefinition* = distinct JSPtr
-  
   
 
 macro importType(kind: untyped, name: static[string] = "") = 
@@ -190,7 +174,7 @@ macro importType(kind: untyped, name: static[string] = "") =
   result = quote do:
     type
       `strongIdent`* {.importc: `cAPIName`.} = distinct ULPtr
-      `weakIdent`* {.importc: `cAPIName`.} = distinct ptr ULStruct
+      `weakIdent`* {.importc: `cAPIName`.} = distinct ULPtr
       `typeIdent`* = `strongIdent` | `weakIdent`
       
 importType ULConfig

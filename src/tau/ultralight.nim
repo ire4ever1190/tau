@@ -1,7 +1,9 @@
 import common
 import ptr_math
+import javascriptcore
 
 {.passL: "-lUltralight".}
+{.passL: "-lUltralightCore".}
 
 const headerFile = "<Ultralight/CAPI.h>"
 
