@@ -110,14 +110,14 @@ type
   KeyEventType* = enum
     ## * **KeyDown**: (Does not trigger accelerator commands in WebCore)
     ##
-    ## Note: You should probably use RawKeyDown instead when a physical key
+    ## .. Note: You should probably use RawKeyDown instead when a physical key
     ##        is pressed. This member is only here for historic compatibility
     ##        with WebCore's key event types.
     ##
     ## * **KeyUp**: Use this when a physical key is released  
     ## * **RawKeyDown** type. Use this when a physical key is pressed.
     ##
-    ## Note: You should use RawKeyDown for physical key presses since it
+    ## .. Note: You should use RawKeyDown for physical key presses since it
     ##        allows WebCore to do additional command translation.
     ##
     ## * **Char**: Use this when the OS generates text from a physical key being pressed (eg, WM_CHAR on Windows).
