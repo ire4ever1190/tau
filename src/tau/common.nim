@@ -219,7 +219,7 @@ macro importDestructor(kind: untyped, dll: string) =
     destructorName = nnkAccQuoted.newTree(ident"=destroy")
   result = quote do:
     proc destroy*(`loweredName`: `kind`) {.cdecl, importc: `cName`, dynlib: `dll`.}
-    proc `destructorName`*(`loweredName`: var `kind`) =
+    proc `destructorName`(`loweredName`: var `kind`) =
       when defined(logULDestroys):
         echo "Destroying: ", astToStr(`kind`) 
       if `loweredName`.pointer != nil:
