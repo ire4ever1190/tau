@@ -1,5 +1,18 @@
 import std/[strutils, macros, os]
 
+##
+## This module contains types, procs, and helpers that are used throughout the files.
+##
+## Common with the types in this package is to have 4 versions. e.x. for App_
+##
+## * AppStrong_: Raw pointer that you have ownership over (you can call destroy on it)
+## * AppWeak_: Raw pointer that you do not have ownership over (you cannot call destroy on it)
+## * AppRaw_: Alias for both strong and weak version (used for procs that can take both)
+## * App_: Nim object that wraps the pointer, used in the high level api (memory is automatically handled for it)
+##
+## The API is consistent between low (using the raw pointers) and high level (using the nim objects that wrap pointers) so it's recommended to use the high level api
+## unless you have special reasons not to.
+
 const headerFolder = currentSourcePath().parentDir() / "include"
 
 
@@ -165,7 +178,10 @@ type
     Smooth
     Normal
     Monochrome
-  
+
+  WrapperObject*[T] = object
+    ## Used to wrap a pointer for use in high level apis
+    internal: T
 
 macro importType(kind: untyped, name: static[string] = "") = 
   ## Creates three type definitions
@@ -177,6 +193,7 @@ macro importType(kind: untyped, name: static[string] = "") =
   ## a proc imported
   let 
     typeIdent = ident(if name == "":  replace($kind, "UL", "") else: name)
+    rawTypeIdent = ident $typeIdent & "Raw"
     strongIdent = ident $typeIdent & "Strong"
     weakIdent = ident $typeIdent & "Weak"
     cAPIName  = newStrLitNode $kind
@@ -184,7 +201,8 @@ macro importType(kind: untyped, name: static[string] = "") =
     type
       `strongIdent`* {.importc: `cAPIName`.} = distinct ULPtr
       `weakIdent`* {.importc: `cAPIName`.} = distinct ULPtr
-      `typeIdent`* = `strongIdent` | `weakIdent`
+      `rawTypeIdent`* = `strongIdent` | `weakIdent`
+      # `typeIdent`* = WrapperObject[`strongIdent`]
       
 importType ULConfig
 importType ULSettings
@@ -211,20 +229,18 @@ type ## Aliases
 
 macro importDestructor(kind: untyped, dll: string) =
   ## Import destructor from the c api and also creates a destructor for arc.
-  ## Should only be used for strong pointers
+  ## Should only be used for strong pointers.
+  ## The c destroy function is not exported since it doesn't make the pointer `nil` which causes problems later (leads to double destroy)
+  ## so instead a template is exported which calls the c destuctor and makes the pointer nil
   let
     name = ($kind.toStrLit()).replace("UL", "")
     loweredName = ident name.toLowerAscii()
     cName = "ulDestroy" & name.replace("Strong", "")
     destructorName = nnkAccQuoted.newTree(ident"=destroy")
+    cDestructor = ident "ulDestroy"
   result = quote do:
     proc destroy*(`loweredName`: `kind`) {.cdecl, importc: `cName`, dynlib: `dll`.}
-    proc `destructorName`(`loweredName`: var `kind`) =
-      when defined(logULDestroys):
-        echo "Destroying: ", astToStr(`kind`) 
-      if `loweredName`.pointer != nil:
-        destroy `loweredName`
-        `loweredName` = nil    
+
 
 importDestructor(SettingsStrong, DLLAppCore)
 importDestructor(ConfigStrong, DLLUltralight)
@@ -239,3 +255,58 @@ importDestructor(KeyEventStrong, DLLUltraLight)
 importDestructor(RendererStrong, DLLUltraLight)
 importDestructor(MouseEventStrong, DLLUltraLight)
 importDestructor(ScrollEventStrong, DLLUltraLight)
+
+proc `=destroy`[T](obj: var WrapperObject[T]) =
+  ## Destroys the object stored in the wrapper
+  mixin destory
+  if obj.internal != nil:
+    destroy obj.internal
+    obj.internal = nil
+
+
+macro wrap[T](obj: typedesc[WrapperObject[T]], prc: proc) =
+  ## Wraps a low level proc by making a proc which uses the `WrapperObject` pointer to call it.
+  ## This is meant for procs where the first param is the object.
+  ## The procs are inlined with {.inline.}
+  let prcName = ident $prc
+  var params: seq[NimNode]
+  var call = nnkCall.newTree(
+    prcName
+  )
+  for i, param in prc.getTypeImpl[0][1..^1]:
+    var p = nnkIdentDefs.newTree( # Unbind the syms
+      ident $param[0],
+      ident $param[1],
+      newEmptyNode()
+    )
+    # Perform conversions to allow easy types to be used e.g. (convert uint to int)
+    let 
+      paramName = ident $p[0]
+      typeName = toLowerAscii($p[1])
+      
+    if typeName.endsWith("raw") or typeName.endsWith("strong") or typeName.endsWith("weak"):
+      call &= nnkDotExpr.newTree(
+        ident $p[0],
+        ident "internal"
+      ) 
+    elif typeName.startsWith("c") and "int" in typeName:
+      # Convert type e.g. int -> cint
+      call &= nnkCall.newTree(
+        ident typeName, 
+        paramName
+      )
+      p[1] = ident replace($p[1], "c", "") # Drop c from parameter e.g. cint -> int
+    else:
+      call &= ident $p[0]
+    
+    params &= p
+    
+    
+  result = newProc(
+    name    = prcName,
+    params  = params,
+    body    = newStmtList(call),
+    pragmas = nnkPragma.newTree(
+      ident "inline"
+    )
+  )
