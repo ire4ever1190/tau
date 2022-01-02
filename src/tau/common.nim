@@ -1,5 +1,5 @@
-import std/[strutils, macros, os]
-
+import std/[strutils, os]
+import std/[macros, macrocache]
 ##
 ## This module contains types, procs, and helpers that are used throughout the files.
 ##
@@ -179,9 +179,29 @@ type
     Normal
     Monochrome
 
-  WrapperObject*[T] = object
+  WrapperObject*[T: ptr ptr object] = object
     ## Used to wrap a pointer for use in high level apis
-    internal: T
+    internal*: T
+
+proc `=destroy`[T](obj: var WrapperObject[T]) =
+  ## Destroys the object stored in the wrapper
+  mixin destroy
+  # Only destroy strong pointers
+  when compiles(destroy obj.internal):
+    if obj.internal != nil:
+      destroy obj.internal
+      obj.internal = nil
+  else:
+    # We don't want dangling pointers though
+    obj.internal = nil
+
+# Series of procs that aid in wrapping
+
+proc wrap*[T: ptr ptr object](pointer: T): WrapperObject[T] =
+  # result = WrapperObject[T](internal: pointer)
+  result.internal = pointer
+
+template wrap*(body: untyped) = body 
 
 macro importType(kind: untyped, name: static[string] = "") = 
   ## Creates three type definitions
@@ -199,11 +219,12 @@ macro importType(kind: untyped, name: static[string] = "") =
     cAPIName  = newStrLitNode $kind
   result = quote do:
     type
-      `strongIdent`* {.importc: `cAPIName`.} = distinct ULPtr
-      `weakIdent`* {.importc: `cAPIName`.} = distinct ULPtr
+      `strongIdent`* {.importc: `cAPIName`.} = ptr ptr object {.pure.}
+      `weakIdent`* {.importc: `cAPIName`.} = ptr ptr object {.final.}
       `rawTypeIdent`* = `strongIdent` | `weakIdent`
-      # `typeIdent`* = WrapperObject[`strongIdent`]
-      
+      `typeIdent`* = WrapperObject[`weakIdent`] | WrapperObject[`strongIdent`]
+
+
 importType ULConfig
 importType ULSettings
 importType ULApp
@@ -241,42 +262,53 @@ macro importDestructor(kind: untyped, dll: string) =
   result = quote do:
     proc destroy*(`loweredName`: `kind`) {.cdecl, importc: `cName`, dynlib: `dll`.}
 
-
-importDestructor(SettingsStrong, DLLAppCore)
-importDestructor(ConfigStrong, DLLUltralight)
-importDestructor(WindowStrong, DLLAppCore)
-importDestructor(OverlayStrong, DLLAppCore)
-importDestructor(ULStringStrong, DLLUltralight)
-importDestructor(AppStrong, DLLAppCore)
-importDestructor(SessionStrong, DLLUltraLight)
-importDestructor(ViewConfigStrong, DLLUltraLight)
-importDestructor(BitmapStrong, DLLUltraLight)
-importDestructor(KeyEventStrong, DLLUltraLight)
-importDestructor(RendererStrong, DLLUltraLight)
-importDestructor(MouseEventStrong, DLLUltraLight)
-importDestructor(ScrollEventStrong, DLLUltraLight)
-
-proc `=destroy`[T](obj: var WrapperObject[T]) =
-  ## Destroys the object stored in the wrapper
-  mixin destory
-  if obj.internal != nil:
-    destroy obj.internal
-    obj.internal = nil
+when not defined(ulNoDestructors):
+  importDestructor(SettingsStrong, DLLAppCore)
+  importDestructor(ConfigStrong, DLLUltralight)
+  importDestructor(WindowStrong, DLLAppCore)
+  importDestructor(OverlayStrong, DLLAppCore)
+  importDestructor(ULStringStrong, DLLUltralight)
+  importDestructor(AppStrong, DLLAppCore)
+  importDestructor(SessionStrong, DLLUltraLight)
+  importDestructor(ViewConfigStrong, DLLUltraLight)
+  importDestructor(BitmapStrong, DLLUltraLight)
+  importDestructor(KeyEventStrong, DLLUltraLight)
+  importDestructor(RendererStrong, DLLUltraLight)
+  importDestructor(MouseEventStrong, DLLUltraLight)
+  importDestructor(ScrollEventStrong, DLLUltraLight)
 
 
-macro wrap[T](obj: typedesc[WrapperObject[T]], prc: proc) =
+
+const wrapInfo = CacheTable"ulWrapping"
+
+proc setWrapInfo(header, dynlib: static[string]) {.compileTime.} =
+  ## Should be called before using wrap macro
+  wrapInfo["header"] = newLit header
+  wrapInfo["dynlib"] = newLit dynlib
+
+macro wrap(cName: static[string], prc: untyped) =
   ## Wraps a low level proc by making a proc which uses the `WrapperObject` pointer to call it.
   ## This is meant for procs where the first param is the object.
   ## The procs are inlined with {.inline.}
-  let prcName = ident $prc
-  var params: seq[NimNode]
-  var call = nnkCall.newTree(
-    prcName
-  )
-  for i, param in prc.getTypeImpl[0][1..^1]:
+  ## Use setWrapInfo_ first to set the info for the file
+  ##
+  ## While this is a chaotic macro, it generates code that otherwise would be very repeatitive and error prone
+  echo cName
+  let prcName = if prc[0].kind == nnkIdent:
+      prc[0]
+    else:
+      prc[0][^1]
+  var 
+    params = @[newEmptyNode()] # params to pass
+    call = nnkCall.newTree(prcName)
+  if prc.params[0].kind != nnkEmpty:
+    params[0] = ident multiReplace($prc.params[0], {"Strong": "", "Weak": ""})
+    
+  var wasClassProc = false
+  for i, param in prc.params[1..^1]:
     var p = nnkIdentDefs.newTree( # Unbind the syms
-      ident $param[0],
-      ident $param[1],
+      ident $param[0], # name
+      ident $param[1], # type
       newEmptyNode()
     )
     # Perform conversions to allow easy types to be used e.g. (convert uint to int)
@@ -285,10 +317,13 @@ macro wrap[T](obj: typedesc[WrapperObject[T]], prc: proc) =
       typeName = toLowerAscii($p[1])
       
     if typeName.endsWith("raw") or typeName.endsWith("strong") or typeName.endsWith("weak"):
+      if i == 0:
+        wasClassProc = true
       call &= nnkDotExpr.newTree(
         ident $p[0],
         ident "internal"
-      ) 
+      )
+      p[1] = ident ($p[1]).replace("Raw", "")
     elif typeName.startsWith("c") and "int" in typeName:
       # Convert type e.g. int -> cint
       call &= nnkCall.newTree(
@@ -300,13 +335,22 @@ macro wrap[T](obj: typedesc[WrapperObject[T]], prc: proc) =
       call &= ident $p[0]
     
     params &= p
-    
-    
-  result = newProc(
-    name    = prcName,
-    params  = params,
-    body    = newStmtList(call),
-    pragmas = nnkPragma.newTree(
-      ident "inline"
-    )
+  # Add pragmas to bind the proc to the c code correctly
+  prc.addPragma(newColonExpr(ident "dynlib", wrapInfo["dynlib"]))
+  prc.addPragma(newColonExpr(ident "header", wrapInfo["header"]))
+  prc.addPragma(newColonExpr(ident "importc", newLit cName))
+
+  result = newStmtList(
+    prc
   )
+  if wasClassProc:
+    # Only automatically create a passing proc if the first parameter was an object.
+    result &= newProc(
+      name    = nnkPostFix.newTree(ident "*", prcName),
+      params  = params,
+      body    = nnkCall.newTree(ident "wrap", call),
+      pragmas = nnkPragma.newTree(
+        ident "inline"
+      )
+    )
+  echo result.treeRepr

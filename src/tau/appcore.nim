@@ -1,4 +1,4 @@
-import common  
+import common {.all.}
 
 type 
   WindowFlags* {.size: sizeof(cint).}= enum
@@ -13,17 +13,23 @@ type
   
 {.passL: "-lAppCore".}
 
-{.push header: "<AppCore/CAPI.h>", dynlib: DLLAppCore.}
+static:
+  setWrapInfo("<AppCore/CAPI.h>", DLLAppCore)
+
+# {.push header: "<AppCore/CAPI.h>", dynlib: DLLAppCore.}
+
+{.pragma: defC,  dynlib: DLLAppCore, header: "<AppCore/CAPI.h>".}
+
 
 #
 # Settings
 #
 
 
-proc createSettings*(): SettingsStrong {.importc: "ulCreateSettings".}
+proc ulCreateSettings*(): SettingsStrong {.importc, defC.}
   ## Create settings with default values
   
-proc `developerName=`*(settings: SettingsRaw, name: ULStringRaw) {.importc: "ulSettingsSetDeveloperName".}
+proc `developerName=`*(settings: SettingsRaw, name: ULStringRaw) {.wrap: "ulSettingsSetDeveloperName".}
   ## Set the name of the developer of this app.
   ##
   ## This is used to generate a unique path to store local application data
@@ -31,22 +37,22 @@ proc `developerName=`*(settings: SettingsRaw, name: ULStringRaw) {.importc: "ulS
   ##
   ## Default is "MyCompany"
   
-proc `forceCPU=`*(settings: SettingsRaw, forceCPU: bool) {.importc: "ulSettingsSetForceCPURenderer".}
+proc `forceCPU=`*(settings: SettingsRaw, forceCPU: bool) {.wrap: "ulSettingsSetForceCPURenderer".}
   ## Ultralight tries to use the GPU renderer when a compatible GPU is detected.
   ##
   ## Set this to true to force the engine to always use the CPU renderer.
-proc `appName=`*(settings: SettingsRaw, name: ULStringRaw) {.importc: "ulSettingsSetAppName".}
+proc `appName=`*(settings: SettingsRaw, name: ULStringRaw) {.wrap: "ulSettingsSetAppName".}
   ## Set the name of this app.
   ##
   ## This is used to generate a unique path to store local application data
   ## on the user's machine.
   ##
   ## Default is "MyApp"
-proc `fileSystemPath=`*(settings: SettingsRaw, path: ULStringRaw) {.importc: "ulSettingsSetFileSystemPath".}
+proc `fileSystemPath=`*(settings: SettingsRaw, path: ULStringRaw) {.wrap: "ulSettingsSetFileSystemPath".}
   ## Set the root file path for our file system, you should set this to the
   ## relative path where all of your app data is.
   ##
-  ## This will be used to resolve all file URLs, eg file:  ##page.html
+  ## This will be used to resolve all file URLs, eg file:  ///page.html
   ##
   ## .. Note::  The default path is "./assets/"
   ##        
@@ -54,17 +60,19 @@ proc `fileSystemPath=`*(settings: SettingsRaw, path: ULStringRaw) {.importc: "ul
   ##         - Windows: relative to the executable path
   ##         - Linux:   relative to the executable path
   ##         - macOS:   relative to YourApp.app/Contents/Resources/
-proc `loadShadersFromFS=`*(settinsg: SettingsRaw, enabled: bool) {.importc: "ulSettingsSetLoadShadersFromFileSystem".}
+#[
+proc `loadShadersFromFS=`*(settings: SettingsRaw, enabled: bool) {.warp: "ulSettingsSetLoadShadersFromFileSystem".} 
   ## Set whether or not we should load and compile shaders from the file system
   ## (eg, from the /shaders/ path, relative to file_system_path).
   ##
   ## If this is false (the default), we will instead load pre-compiled shaders
   ## from memory which speeds up application startup time.
+  ]#
 #
 # App
 #
 
-proc createApp*(settings: SettingsRaw, config: ConfigRaw): AppStrong {.importc: "ulCreateApp".}
+proc createApp*(settings: SettingsRaw, config: ConfigRaw): AppStrong {.wrap: "ulCreateApp".}
   ## Create the App singleton.
   ##
   ## **settings**: Settings to customize App runtime behavior. You can pass `nil` for this parameter to use default settings.
@@ -90,12 +98,16 @@ proc setUpdateCallback*(app: AppRaw, callback: UpdateCallback, data: pointer) {.
   ##
   ## .. Note::  This event is fired right before the run loop calls
   ##        `Renderer.update()` and `Renderer.render()`.
+  
 proc isRunning*(app: AppRaw): bool {.importc: "ulAppIsRunning".}
   ## Whether or not the App is running.
+  
 proc renderer*(app: AppRaw): RendererWeak {.importc: "ulAppGetRenderer".}
   ## Get the underlying Renderer instance.
+  
 proc quit*(app: AppRaw) {.importc: "ulAppQuit".}
   ## Quit the application.
+  
 proc `window=`*(app: AppRaw, window: WindowRaw) {.importc: "ulAppSetWindow".}
 
 #
@@ -125,14 +137,19 @@ proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, 
   ## **fullscreen**: Whether or not the window is fullscreen.
   ##
   ## **flags**  Various window flags
+  
 proc width*(window: WindowRaw): cuint  {.importc: "ulWindowGetWidth".}
   ## Get window width (in pixels).
+  
 proc height*(window: WindowRaw): cuint {.importc: "ulWindowGetHeight".}
   ## Get window height (in pixels).
+  
 proc screenWidth*(window: WindowRaw): cuint {.importc: "ulWindowGetScreenWidth".}
   ## Get window width (in screen coordinates).
+  
 proc screenHeight*(window: WindowRaw): cuint {.importc: "ulWindowGetScreenHeight".}
   ## Get window height (in screen coordinates).
+  
 proc setResizeCallback*(window: WindowRaw, callback: ResizeCallback, data: pointer) {.importc: "ulWindowSetResizeCallback".}
 proc setResizeCallback*(window: WindowRaw, callback: pointer, data: pointer) {.importc: "ulWindowSetResizeCallback".}
   ## Set a callback to be notified when a window resizes
@@ -144,35 +161,49 @@ proc setResizeCallback*(window: WindowRaw, callback: pointer, data: pointer) {.i
   ##   proc onResize(data: pointer, width, height: cuint) {.cdecl.}=
   ##     cast[OverlayWeak](data).resize(width, height)
   ##   window.setResizeCallback(onResize, overlay.pointer)
+  
 proc setCloseCallback*(window: WindowRaw, callback: CloseCallback, data: pointer) {.importc: "ulWindowSetCloseCallback".}
   ## Set a callback to be notified when a window closes.
+  
 proc moveTo*(window: WindowRaw, x, y: cint) {.importc: "ulWindowMoveTo".}
   ## Move the window to a new position (in screen coordinates) relative to the top-left of the
   ## monitor area.
+  
 proc moveToCenter*(window: WindowRaw) {.importc: "ulWindowMoveToCenter".}
   ## Move the window to the center of the monitor.
+  
 proc x*(window: WindowRaw): cint {.importc: "ulWindowGetPositionX".}
   ## Get the x-position of the window (in screen coordinates) relative to the top-left of the
   ## monitor area.
+  
 proc y*(window: WindowRaw): cint {.importc: "ulWindowGetPositionY".}
   ## Get the y-position of the window (in screen coordinates) relative to the top-left of the
   ## monitor area.
+  
 proc isFullscreen*(window: WindowRaw): bool {.importc: "ulWindowIsFullscreen".}
   ## Get whether or not a window is fullscreen.
+  
 proc isVisible*(window: WindowRaw): bool {.importc: "ulWindowIsVisible".}
   ## Whether or not the window is currently visible (not hidden).
+  
 proc scale*(window: WindowRaw): cdouble {.importc: "ulWindowGetScale".}
   ## Get the DPI scale of a window.
+  
 proc show*(window: WindowRaw) {.importc: "ulWindowShow".}
   ## Show the window (if it was previously hidden).
+  
 proc hide*(window: WindowRaw) {.importc: "ulWindowHide".}
   ## Hide the window.
+  
 proc close*(window: WindowRaw) {.importc: "ulWindowClose".}
   ## Close a window.
+  
 proc screenToPixels*(window: WindowRaw, val: cint) {.importc: "ulWindowScreenToPixels".}
   ## Convert screen coordinates to pixels using the current DPI scale.
+  
 proc pixelsToScreen*(window: WindowRaw, val: cint) {.importc: "ulWindowPixelsToScreen".}
   ## Convert pixels to screen coordinates using the current DPI scale.
+  
 proc nativeHandle*(window: WindowRaw): pointer {.importc: "ulWindowGetNativeHandle".}
   ## Get the underlying native window handle.
   ##
@@ -180,8 +211,10 @@ proc nativeHandle*(window: WindowRaw): pointer {.importc: "ulWindowGetNativeHand
   ##                 - HWND on Windows
   ##                 - NSWindow* on macOS
   ##                 - GLFWwindow* on Linux
+  
 proc `title=`*(window: WindowRaw, title: cstring) {.importc: "ulWindowSetTitle".}
   ## Set the window title.
+  
 proc `cursor=`*(window: WindowRaw, cursor: Cursor) {.importc: "ulWindowSetCursor".}
   ## Set the cursor for a window.
 
@@ -198,32 +231,24 @@ proc createOverlay*(window: WindowRaw, width, height: cuint, x, y: cint): Overla
   ##
   ## **height**  The height in pixels.
   ##
-  ## **x**       The x-position (offset from the left of the Window), in
-  ##                 pixels.
+  ## **x**       The x-position (offset from the left of the Window), in pixels.
   ##
-  ## **y**       The y-position (offset from the top of the Window), in
-  ##                 pixels.
+  ## **y**       The y-position (offset from the top of the Window), in pixels.
   ##
-  ##
-  ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should
-  ##        create the Overlay then load content into the underlying View.
+  ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should create the Overlay then load content into the underlying View.
   
 proc createOverlay*(window: WindowRaw, view: View, x, y: cint): OverlayStrong {.importc: "ulCreateOverlayWithView".}
   ## Create a new Overlay, wrapping an existing View.
   ##
-  ## **window**  The window to create the Overlay in. (we currently only
-  ##                 support one window per application)
+  ## **window**  The window to create the Overlay in. (Ultralight currently only supports one window per application)
   ##
   ## **view**    The View to wrap (will use its width and height).
   ##
-  ## **x**       The x-position (offset from the left of the Window), in
-  ##                 pixels.
+  ## **x**       The x-position (offset from the left of the Window), in pixels.
   ##
-  ## **y**       The y-position (offset from the top of the Window), in
-  ##                 pixels.
+  ## **y**       The y-position (offset from the top of the Window), in pixels.
   ##
-  ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should
-  ##        create the Overlay then load content into the underlying View
+  ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should create the Overlay then load content into the underlying View
   
 proc view*(overlay: OverlayRaw): ViewWeak {.importc: "ulOverlayGetView".}
   ## Get the underlying View.
@@ -275,9 +300,30 @@ proc enableDefaultLogger(logPath: ULStringRaw) {.importc: "ulEnableDefaultLogger
   ##
   ## You should specify a writable log path to write the log to 
   ## for example "./ultralight.log".
-{.pop.}
+# {.pop.}
+
+proc createSettings*(): Settings {.inline.} =
+  result = wrap ulCreateSettings()
 
 #
-# Helpers
+# High level procs
 #
 
+proc createOverlay*(window: Window, x, y: int = 0): Overlay =
+  ## Creates an overlay that is the size of the window at coordinates x and y
+  # window.internal.createOverlay(window.width, window.height, cint x, cint y)
+
+
+proc createWindow*(monitor: Monitor, width, height: uint, fullscreen: bool, flags: set[WindowFlags]): Window {.inline.} =
+  ## Creates a window that is on a monitor
+  # monitor.internal.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))
+
+
+proc createOverlay*(window: WindowRaw, x, y: int = 0): Overlay =
+  ## Creates an overlay that is the size of the window at coordinates x and y
+  window.createOverlay(window.width, window.height, cint x, cint y)
+
+
+proc createWindow*(monitor: Monitor, width, height: uint, fullscreen: bool, flags: set[WindowFlags]): Window {.inline.} =
+  ## Creates a window that is on a monitor
+  monitor.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))

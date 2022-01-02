@@ -1,11 +1,15 @@
 import common
 import ptr_math
-import javascriptcore
+import javascriptcorelow
 
 {.passL: "-lUltralight".}
 {.passL: "-lUltralightCore".}
 
 const headerFile = "<Ultralight/CAPI.h>"
+
+const
+  defaultHeader = headerFile
+  defaulDynLib = DLLUltraLight
 
 when defined(windows):
   type ULFileHandle = distinct csize_t
@@ -124,29 +128,37 @@ proc versionPatch*(): cuint {.importc: "ulVersionPatch".}
   
 proc ulString*(str: cstring): ULStringStrong {.importc: "ulCreateString".}
   ## Create string from `cstring`.
+  
 proc ulString*(str: cstring, len: csize_t): ULStringStrong {.importc: "ulCreateStringUTF8".}
   ## Create string from UTF-8 buffer.
+  
 proc ulString*(str: ptr ULChar16, len: csize_t): ULStringStrong {.importc: "ulCreateStringUTF16".}
   ## Create string from UTF-16 buffer.
-proc copy*(str: ULString): ULStringStrong {.importc: "ulCreateStringFromCopy".}
+  
+proc copy*(str: ULStringRaw): ULStringStrong {.importc: "ulCreateStringFromCopy".}
   ## Create string from copy of existing string.
   ## This is useful in making your own copy of a weak string returned from a proc  
-proc `copy=`*(dest: var ULStringStrong, src: ULString) =
+  
+proc `copy=`*(dest: var ULStringStrong, src: ULStringRaw) =
   if dest.pointer != src.pointer:
     `=destroy`(dest)
     wasMoved(dest)
     dest = copy src
-proc len*(str: ULString): cint {.importc: "ulStringGetLength".}
+    
+proc len*(str: ULStringRaw): cint {.importc: "ulStringGetLength".}
   ## Get length in UTF-16 characters.
-proc data*(str: ULString): ptr ULChar16 {.importc: "ulStringGetData".}
+  
+proc data*(str: ULStringRaw): ptr ULChar16 {.importc: "ulStringGetData".}
   ## Get internal UTF-16 buffer data.
 
-proc isEmpty*(str: ULString): bool {.importc: "ulStringIsEmpty".}
+proc isEmpty*(str: ULStringRaw): bool {.importc: "ulStringIsEmpty".}
   ## Whether this string is empty or not.
+  
 # TODO: allow these assigns to be used with `=` operator
-proc assign*(str: ULString, newStr: ULString) {.importc: "ulStringAssignString".}
+proc assign*(str: ULStringRaw, newStr: ULStringRaw) {.importc: "ulStringAssignString".}
   ## Replaces the contents of **str** with the contents of **new_str**
-proc assign*(str: ULString, newStr: cstring) {.importc: "ulStringAssignCString".}
+  
+proc assign*(str: ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCString".}
   ## Replaces the contents of **str** with the contents of a `cstring`.
 #
 # Bitmap
@@ -159,42 +171,55 @@ proc createBitmap*(width, height: cuint, format: BitmapFormat): BitmapStrong {.i
 proc createBitmap*(width, height: cuint, format: BitmapFormat, 
                    rowBytes: cuint, pixels: pointer, size: csize_t, shouldCopy: bool): BitmapStrong {.importc: "ulCreateBitmapFromPixels".}
   ## Create bitmap from existing pixel buffer
-proc copy*(bitmap: Bitmap): BitmapStrong {.importc: "ulCreateBitmapFromCopy".}
+proc copy*(bitmap: BitmapRaw): BitmapStrong {.importc: "ulCreateBitmapFromCopy".}
   ## Create bitmap from copy.
-proc `copy=`*(dest: var BitmapStrong, src: Bitmap) =
+proc `copy=`*(dest: var BitmapStrong, src: BitmapRaw) =
   if dest.pointer != src.pointer:
     `=destroy`(dest)
     wasMoved(dest)
     dest = copy src
 
-proc width*(bitmap: Bitmap): cuint {.importc: "ulBitmapGetWidth".}
+proc width*(bitmap: BitmapRaw): cuint {.importc: "ulBitmapGetWidth".}
   ## Get the width in pixels.
-proc height*(bitmap: Bitmap): cuint {.importc: "ulBitmapGetHeight".}
+  
+proc height*(bitmap: BitmapRaw): cuint {.importc: "ulBitmapGetHeight".}
   ## Get the height in pixels.
-proc format*(bitmap: Bitmap): BitmapFormat {.importc: "ulBitmapGetFormat".}
+  
+proc format*(bitmap: BitmapRaw): BitmapFormat {.importc: "ulBitmapGetFormat".}
   ## Get the pixel format.
-proc bpp*(bitmap: Bitmap): cuint {.importc: "ulBitmapGetBpp".}
+  
+proc bpp*(bitmap: BitmapRaw): cuint {.importc: "ulBitmapGetBpp".}
   ## Get the bytes per pixel.
-proc rowBytes*(bitmap: Bitmap): cuint {.importc: "ulBitmapGetRowBytes".}
+  
+proc rowBytes*(bitmap: BitmapRaw): cuint {.importc: "ulBitmapGetRowBytes".}
   ## Get the number of bytes per row.
-proc len*(bitmap: Bitmap): csize_t {.importc: "ulBitmapGetSize".}
+  
+proc len*(bitmap: BitmapRaw): csize_t {.importc: "ulBitmapGetSize".}
   ## Get the size in bytes of the underlying pixel buffer.
-proc ownsPixels*(bitmap: Bitmap): bool {.importc: "ulBitmapOwnsPixels".}
+  
+proc ownsPixels*(bitmap: BitmapRaw): bool {.importc: "ulBitmapOwnsPixels".}
   ## Whether or not this bitmap owns its own pixel buffer.
-proc lockPixels*(bitmap: Bitmap): pointer {.importc: "ulBitmapLockPixels".}
+  
+proc lockPixels*(bitmap: BitmapRaw): pointer {.importc: "ulBitmapLockPixels".}
   ## Lock pixels for reading/writing, returns pointer to pixel buffer.
-proc unlockPixels*(bitmap: Bitmap) {.importc: "ulBitmapUnlockPixels".}
+  
+proc unlockPixels*(bitmap: BitmapRaw) {.importc: "ulBitmapUnlockPixels".}
   ## Unlock pixels after locking.
-proc rawPixels*(bitmap: Bitmap) {.importc: "ulBitmapRawPixels".}
+  
+proc rawPixels*(bitmap: BitmapRaw) {.importc: "ulBitmapRawPixels".}
   ## Get raw pixel buffer-- you should only call this if Bitmap is already
   ## locked.
-proc isEmpty*(bitmap: Bitmap): bool {.importc: "ulBitmapIsEmpty".}
+  
+proc isEmpty*(bitmap: BitmapRaw): bool {.importc: "ulBitmapIsEmpty".}
   ## Whether or not this bitmap is empty.
-proc erase*(bitmap: Bitmap) {.importc: "ulBitmapErase".}
+  
+proc erase*(bitmap: BitmapRaw) {.importc: "ulBitmapErase".}
   ## Reset bitmap pixels to 0.
-proc writePNG*(bitmap: Bitmap, path: cstring) {.importc: "ulBitmapWritePNG".}
+  
+proc writePNG*(bitmap: BitmapRaw, path: cstring) {.importc: "ulBitmapWritePNG".}
   ## Write bitmap to a PNG on disk.
-proc swapRedBlueChannels*(bitmap: Bitmap) {.importc: "ulBitmapSwapRedBlueChannels".}
+  
+proc swapRedBlueChannels*(bitmap: BitmapRaw) {.importc: "ulBitmapSwapRedBlueChannels".}
   ## This converts a BGRA bitmap to RGBA bitmap and vice-versa by swapping
   ## the red and blue channels.
 
@@ -203,14 +228,17 @@ proc swapRedBlueChannels*(bitmap: Bitmap) {.importc: "ulBitmapSwapRedBlueChannel
 #
 
 proc createKeyEvent*(kind: KeyEventType, modifiers: cuint, virtualKeyCode, nativeKeyCode: cint,
-                     text, unmodifiedText: ULString,
+                     text, unmodifiedText: ULStringRaw,
                      isKeypad, isAutoRepeat, isSystemKey: bool) {.importc: "ulCreateKeyEvent".}
   ## Create a key event
+  
 proc createMouseEvent*(kind: MouseEventType, x, y: cint, button: MouseButton) {.importc: "ulCreateMouseEvent".}
   ## Create a mouse event
+  
 proc createScrollEvent*(kind: ScrollEventType, deltaX, deltaY: cint) {.importc: "ulCreateScrollEvent".}
   ## Create a scroll event
-# TODO: Add apis for making key events from native win32/mac key events
+  
+# TODO: Add APIs for making key events from native win32/mac key events
 
 #
 #  Rect/IntRect
@@ -289,80 +317,92 @@ proc bitmap*(surface: BitmapSurface) {.importc: "ulBitmapSurfaceGetBitmap".}
   
 proc createConfig*(): ConfigStrong {.importc: "ulCreateConfig".}
   ## Create config with default values
-proc `resourcePath=`*(config: Config, path: ULString) {.importc: "ulConfigSetResourcePath".}
+proc `resourcePath=`*(config: ConfigRaw, path: ULStringRaw) {.importc: "ulConfigSetResourcePath".}
   ## Set the file path to the directory that contains Ultralight's bundled
   ## resources (eg, cacert.pem and other localized resources).
-proc `cachePath=`*(config: Config, path: ULString) {.importc: "ulConfigSetCachePath".}
+proc `cachePath=`*(config: ConfigRaw, path: ULStringRaw) {.importc: "ulConfigSetCachePath".}
   ## Set the file path to a writable directory that will be used to store
   ## cookies, cached resources, and other persistent data.
-proc `faceWinding=`*(config: Config, winding: FaceWinding) {.importc: "ulConfigSetFaceWinding".}
+proc `faceWinding=`*(config: ConfigRaw, winding: FaceWinding) {.importc: "ulConfigSetFaceWinding".}
   ## The winding order for front-facing triangles.
   ##
   ## .. Note:: This is only used with custom GPUDrivers
-proc `fontHinting=`*(config: Config, hinting: FontHinting) {.importc: "ulConfigSetFontHinting".}
+proc `fontHinting=`*(config: ConfigRaw, hinting: FontHinting) {.importc: "ulConfigSetFontHinting".}
   ## The hinting algorithm to use when rendering fonts. (Default = `Normal`)
-proc `fontGamma=`*(config: Config, gamma: cdouble) {.importc: "ulConfigSetFontGamma".}
+proc `fontGamma=`*(config: ConfigRaw, gamma: cdouble) {.importc: "ulConfigSetFontGamma".}
   ## The gamma to use when compositing font glyphs, change this value to
   ## adjust contrast (Adobe and Apple prefer 1.8, others may prefer 2.2).
   ## (Default = 1.8)
-proc `userCSS=`*(config: Config, css_string: ULString) {.importc: "ulConfigSetUserStylesheet".}
+proc `userCSS=`*(config: ConfigRaw, css_string: ULStringRaw) {.importc: "ulConfigSetUserStylesheet".}
   ## Set user stylesheet (CSS) (Default = Empty).
-proc `forceRepaint=`*(config: Config, enabled: bool) {.importc: "ulConfigSetForceRepaint".}
+  
+proc `forceRepaint=`*(config: ConfigRaw, enabled: bool) {.importc: "ulConfigSetForceRepaint".}
   ## Set whether or not we should continuously repaint any Views or compositor
   ## layers, regardless if they are dirty or not. This is mainly used to
   ## diagnose painting/shader issues. (Default = False)
-proc `animationTimerDelay=`*(config: Config, delay: cdouble) {.importc: "ulConfigSetAnimationTimerDelay".}
+  
+proc `animationTimerDelay=`*(config: ConfigRaw, delay: cdouble) {.importc: "ulConfigSetAnimationTimerDelay".}
   ## Set the amount of time to wait before triggering another repaint when a
   ## CSS animation is active. (Default = 1.0 / 60.0)
-proc `scrollTimerDelay=`*(config: Config, delay: cdouble) {.importc: "ulConfigSetScrollTimerDelay".}
+  
+proc `scrollTimerDelay=`*(config: ConfigRaw, delay: cdouble) {.importc: "ulConfigSetScrollTimerDelay".}
   ## When a smooth scroll animation is active, the amount of time (in seconds)
   ## to wait before triggering another repaint. Default is 60 Hz.
-proc `recycleDelay=`*(config: Config, delay: cdouble) {.importc: "ulConfigSetRecycleDelay".}
+  
+proc `recycleDelay=`*(config: ConfigRaw, delay: cdouble) {.importc: "ulConfigSetRecycleDelay".}
   ## The amount of time (in seconds) to wait before running the recycler (will
   ## attempt to return excess memory back to the system). (Default = 4.0)
-proc `memoryCacheSize=`*(config: Config, size: cuint) {.importc: "ulConfigSetMemoryCacheSize".}
+  
+proc `memoryCacheSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSetMemoryCacheSize".}
   ## Set the size of WebCore's memory cache for decoded images, scripts, and
   ## other assets in bytes. (Default = 64 * 1024 * 1024)
-proc `pageCacheSize=`*(config: Config, size: cuint) {.importc: "ulConfigSetPageCacheSize".}
+  
+proc `pageCacheSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSetPageCacheSize".}
   ## Set the number of pages to keep in the cache. (Default = 0)
-proc `ramSize=`*(config: Config, size: cuint) {.importc: "ulConfigSetOverrideRAMSize".}
+  
+proc `ramSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSetOverrideRAMSize".}
   ## JavaScriptCore tries to detect the system's physical RAM size to set
   ## reasonable allocation limits. Set this to anything other than 0 to
   ## override the detected value. Size is in bytes.
   ##
   ## This can be used to force JavaScriptCore to be more conservative with
   ## its allocation strategy (at the cost of some performance).
-proc `minLargeHeapSize=`*(config: Config, size: cuint) {.importc: "ulConfigSetMinLargeHeapSize".}
+  
+proc `minLargeHeapSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSetMinLargeHeapSize".}
   ## The minimum size of large VM heaps in JavaScriptCore. Set this to a
   ## lower value to make these heaps start with a smaller initial value.
-proc `minSmallHeapSize=`*(config: Config, size: cuint) {.importc: "ulConfigSetMinSmallHeapSize".}
+  
+proc `minSmallHeapSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSetMinSmallHeapSize".}
   ## The minimum size of small VM heaps in JavaScriptCore. Set this to a
   ## lower value to make these heaps start with a smaller initial value.
+  
 #
 # View
 #
 
-proc createView*(renderer: Renderer, width, height: cuint, config: ViewConfig, session: Session) {.importc: "ulCreateView".}
+proc createView*(renderer: RendererRaw, width, height: cuint, config: ViewConfigRaw, session: SessionRaw) {.importc: "ulCreateView".}
   ## Create a View with certain size (in pixels).
   ##
   ## .. Note::  You can pass `nil` to **session** to use the default session.
 
-proc title*(view: View): ULStringWeak {.importc: "ulViewGetTitle".}
-proc url*(view: View): ULStringWeak {.importc: "ulViewGetURL".}
+proc title*(view: ViewRaw): ULStringWeak {.importc: "ulViewGetTitle".}
+  ## Get current title
+  
+proc url*(view: ViewRaw): ULStringWeak {.importc: "ulViewGetURL".}
   ## Get current URL.
-proc width*(view: View): cuint {.importc: "ulViewGetWidth".}
+proc width*(view: ViewRaw): cuint {.importc: "ulViewGetWidth".}
   ## Get the width, in pixels.
-proc height*(view: View): cuint {.importc: "ulViewGetHeight".}
+proc height*(view: ViewRaw): cuint {.importc: "ulViewGetHeight".}
   ## Get the height, in pixels.
-proc resize*(view: View, width, height: cuint) {.importc: "ulViewResize".}
+proc resize*(view: ViewRaw, width, height: cuint) {.importc: "ulViewResize".}
   ## Resize view to a certain width and height (in pixels).
-proc isLoading*(view: View): bool {.importc: "ulViewIsLoading".}
+proc isLoading*(view: ViewRaw): bool {.importc: "ulViewIsLoading".}
   ## Check if main frame is loading.
-proc renderTarget*(view: View): RenderTarget {.importc: "ulViewGetRenderTarget".}
+proc renderTarget*(view: ViewRaw): RenderTarget {.importc: "ulViewGetRenderTarget".}
   ## Get the RenderTarget for the View.
   ##
   ## .. Note::  Only valid when the GPU renderer is enabled in Config.
-proc surface*(view: View): Surface {.importc: "ulViewGetSurface".}
+proc surface*(view: ViewRaw): Surface {.importc: "ulViewGetSurface".}
   ## Get the Surface for the View (native pixel buffer container).
   ##
   ## .. Note:: Only valid when the GPU renderer is disabled in Config.
@@ -376,12 +416,13 @@ proc surface*(view: View): Surface {.importc: "ulViewGetSurface".}
   ##        bitmap by casting `Surface` to `BitmapSurface` and calling
   ##        bitmap_.
 
-proc loadURL*(view: View, url: ULString) {.importc: "ulViewLoadURL".}
+proc loadURL*(view: ViewRaw, url: ULStringRaw) {.importc: "ulViewLoadURL".}
   ## Load a URL into main frame.
-proc loadHTML*(view: View, html: ULString) {.importc: "ulViewLoadHTML".}
+  
+proc loadHTML*(view: ViewRaw, html: ULStringRaw) {.importc: "ulViewLoadHTML".}
   ## Load a raw string of HTML.
 
-proc lockJSCtx*(view: View): JSContextRef {.importc: "ulViewLockJSContext".}
+proc lockJSCtx*(view: ViewRaw): JSContextRef {.importc: "ulViewLockJSContext".}
   ## Acquire the page's JSContext for use with JavaScriptCore API.
   ## 
   ## .. Note::  This call locks the context for the current thread. You should
@@ -390,17 +431,17 @@ proc lockJSCtx*(view: View): JSContextRef {.importc: "ulViewLockJSContext".}
   ##
   ## .. Note::  The lock is recusive, it's okay to call this multiple times as long
   ##        as you call unlockJSCtx_ the same number of times.
-proc unlockJSCtx*(view: View) {.importc: "ulViewUnlockJSContext".}
+  
+proc unlockJSCtx*(view: ViewRaw) {.importc: "ulViewUnlockJSContext".}
   ## Unlock the page's JSContext after a previous call to lockJSCtx_.
-proc evalScript*(view: View, js: ULString, exception: ptr ULStringWeak): ULStringWeak {.importc: "ulViewEvaluateScript".}
+  
+proc evalScript*(view: ViewRaw, js: ULStringRaw, exception: ptr ULStringWeak): ULStringWeak {.importc: "ulViewEvaluateScript".}
   ##
   ## Evaluate a string of JavaScript and return result.
   ##
   ## **js**  The string of JavaScript to evaluate.
   ##
-  ## **exception**  The address of a ULString to store a description of the
-  ##                    last exception. Pass nil to ignore this. Don't destroy
-  ##                    the exception string returned, it's owned by the View.
+  ## **exception**  The address of a ULString to store a description of the last exception.
   ##
   ## An example of using this API:
   ##
@@ -410,57 +451,76 @@ proc evalScript*(view: View, js: ULString, exception: ptr ULStringWeak): ULStrin
   ##  var exception: ULStringWeak # Owned by view, not us
   ##  let result = view.evalScript(script, addr exception)
   ##  assert result == ulString"2"
-proc canGoBack*(view: View): bool {.importc: "ulViewCanGoBack".}
+  
+proc canGoBack*(view: ViewRaw): bool {.importc: "ulViewCanGoBack".}
   ## Check if can navigate backwards in history.
-proc canGoForward*(view: View): bool {.importc: "ulViewCanGoForward".}
+  
+proc canGoForward*(view: ViewRaw): bool {.importc: "ulViewCanGoForward".}
   ## Check if can navigate forwards in history.
-proc goBack*(view: View) {.importc: "ulViewGoBack".}
+  
+proc goBack*(view: ViewRaw) {.importc: "ulViewGoBack".}
   ## Navigate backwards in history.
-proc goForward*(view: View) {.importc: "ulViewGoForward".}
+  
+proc goForward*(view: ViewRaw) {.importc: "ulViewGoForward".}
   ## Navigate forwards in history.
-proc gotoHistoryOffset*(view: View, offset: cint) {.importc: "ulViewGoToHistoryOffset".}
+  
+proc gotoHistoryOffset*(view: ViewRaw, offset: cint) {.importc: "ulViewGoToHistoryOffset".}
   ## Navigate to arbitrary offset in history.
-proc reload*(view: View) {.importc: "ulViewReload".}
+  
+proc reload*(view: ViewRaw) {.importc: "ulViewReload".}
   ## Reload current page.
-proc stop*(view: View) {.importc: "ulViewStop".}
+  
+proc stop*(view: ViewRaw) {.importc: "ulViewStop".}
   ## Stop all page loads.
-proc focus*(view: View) {.importc: "ulViewFocus".}
+  
+proc focus*(view: ViewRaw) {.importc: "ulViewFocus".}
   ## Give focus to the View.
   ##
   ## You should call this to give visual indication that the View has input
   ## focus (changes active text selection colors, for example).
-proc unfocus*(view: View) {.importc: "ulViewUnfocus".}
+  
+proc unfocus*(view: ViewRaw) {.importc: "ulViewUnfocus".}
   ## Remove focus from the View and unfocus any focused input elements.
   ##
   ## You should call this to give visual indication that the View has lost
   ## input focus.
-proc hasFocus*(view: View): bool {.importc: "ulViewHasFocus".}
+  
+proc hasFocus*(view: ViewRaw): bool {.importc: "ulViewHasFocus".}
   ## Whether or not the View has focus.
-proc hasInputFocus*(view: View): bool {.importc: "ulViewHasInputFocus".}
+  
+proc hasInputFocus*(view: ViewRaw): bool {.importc: "ulViewHasInputFocus".}
   ## Whether or not the View has an input element with visible keyboard focus
   ## (indicated by a blinking caret).
   ##
   ## You can use this to decide whether or not the View should consume
   ## keyboard input events (useful in games with mixed UI and key handling).
-proc fireEvent*(view: View, event: KeyEvent) {.importc: "ulViewFireKeyEvent".}
+  
+proc fireEvent*(view: ViewRaw, event: KeyEventRaw) {.importc: "ulViewFireKeyEvent".}
   ## Fire a keyboard event.
-proc fireEvent*(view: View, event: MouseEvent) {.importc: "ulViewFireMouseEvent".}
+  
+proc fireEvent*(view: ViewRaw, event: MouseEventRaw) {.importc: "ulViewFireMouseEvent".}
   ## Fire a mouse event.
-proc fireEvent*(view: View, event: ScrollEvent) {.importc: "ulViewFireScrollEvent".}
+  
+proc fireEvent*(view: ViewRaw, event: ScrollEventRaw) {.importc: "ulViewFireScrollEvent".}
   ## Fire a scroll event.
 
-proc setChangeTitleCallback*(view: View, callback: ChangeTitleCallback, data: pointer) {.importc: "ulViewSetChangeTitleCallback".}
+proc setChangeTitleCallback*(view: ViewRaw, callback: ChangeTitleCallback, data: pointer) {.importc: "ulViewSetChangeTitleCallback".}
   ## Set callback for when the page title changes.
-proc setChangeURLCallback*(view: View, callback: ChangeURLCallback, data: pointer) {.importc: "ulViewSetChangeURLCallback".}
+  
+proc setChangeURLCallback*(view: ViewRaw, callback: ChangeURLCallback, data: pointer) {.importc: "ulViewSetChangeURLCallback".}
   ## Set callback for when the page URL changes.
-proc setChangeTooltipCallback*(view: View, calback: ChangeTooltipCallback, data: pointer) {.importc: "ulViewSetChangeTooltipCallback".}
+  
+proc setChangeTooltipCallback*(view: ViewRaw, calback: ChangeTooltipCallback, data: pointer) {.importc: "ulViewSetChangeTooltipCallback".}
   ## Set callback for when the tooltip changes (usually result of a mouse hover).
-proc setChangeCursorCallback*(view: View, callback: ChangeCursorCallback, data: pointer) {.importc: "ulViewSetChangeCursorCallback".}
+  
+proc setChangeCursorCallback*(view: ViewRaw, callback: ChangeCursorCallback, data: pointer) {.importc: "ulViewSetChangeCursorCallback".}
   ## Set callback for when the mouse cursor changes.
-proc setAddConsoleMessageCallback*(view: View, callback: AddConsoleMessageCallback, data: pointer) {.importc: "ulViewSetAddConsoleMessageCallback".}
+  
+proc setAddConsoleMessageCallback*(view: ViewRaw, callback: AddConsoleMessageCallback, data: pointer) {.importc: "ulViewSetAddConsoleMessageCallback".}
   ## Set callback for when a message is added to the console (useful for
   ## JavaScript / network errors and debugging).
-proc setCreateChildViewCallback*(view: View, callback: CreateChildViewCallback, data: pointer) {.importc: "ulViewSetCreateChildViewCallback".}
+  
+proc setCreateChildViewCallback*(view: ViewRaw, callback: CreateChildViewCallback, data: pointer) {.importc: "ulViewSetCreateChildViewCallback".}
   ## Set callback for when the page wants to create a new View.
   ##
   ## This is usually the result of a user clicking a link with target="_blank"
@@ -471,13 +531,17 @@ proc setCreateChildViewCallback*(view: View, callback: CreateChildViewCallback, 
   ## and return it. You are responsible for displaying the returned View.
   ##
   ## You should return `nil` if you want to block the action.
-proc setBeginLoadingCallback*(view: View, callback: BeginLoadingCallback, data: pointer) {.importc: "ulViewSetBeginLoadingCallback".}
+  
+proc setBeginLoadingCallback*(view: ViewRaw, callback: BeginLoadingCallback, data: pointer) {.importc: "ulViewSetBeginLoadingCallback".}
   ## Set callback for when the page begins loading a new URL into a frame.
-proc setFinishLoadingCallback*(view: View, callback: FinishLoadingCallback, data: pointer) {.importc: "ulViewSetFinishLoadingCallback".}
+  
+proc setFinishLoadingCallback*(view: ViewRaw, callback: FinishLoadingCallback, data: pointer) {.importc: "ulViewSetFinishLoadingCallback".}
   ## Set callback for when the page finishes loading a URL into a frame.
-proc setFailLoadingCallback*(view: View, callback: FailLoadingCallback, data: pointer) {.importc: "ulViewSetFailLoadingCallback".}
+  
+proc setFailLoadingCallback*(view: ViewRaw, callback: FailLoadingCallback, data: pointer) {.importc: "ulViewSetFailLoadingCallback".}
   ## Set callback for when an error occurs while loading a URL into a frame.
-proc setWindowObjectReadyCallback*(view: View, callback: WindowObjectReadyCallback, data: pointer) {.importc: "ulViewSetWindowObjectReadyCallback".}
+  
+proc setWindowObjectReadyCallback*(view: ViewRaw, callback: WindowObjectReadyCallback, data: pointer) {.importc: "ulViewSetWindowObjectReadyCallback".}
   ## Set callback for when the JavaScript window object is reset for a new
   ## page load.
   ##
@@ -490,24 +554,28 @@ proc setWindowObjectReadyCallback*(view: View, callback: WindowObjectReadyCallba
   ##
   ## The window object is lazily initialized (this will not be called on pages
   ## with no scripts).
-proc setDOMReadyCallback*(view: View, callback: DOMReadyCallback, data: pointer) {.importc: "ulViewSetDOMReadyCallback".}
+  
+proc setDOMReadyCallback*(view: ViewRaw, callback: DOMReadyCallback, data: pointer) {.importc: "ulViewSetDOMReadyCallback".}
   ## Set callback for when all JavaScript has been parsed and the document is
   ## ready.
   ##
   ## This is the best time to make any JavaScript calls that are dependent on
   ## DOM elements or scripts on the page.
-proc setUpdateHistoryCallback*(view: View, callback: UpdateHistoryCallback, data: pointer) {.importc: "ulViewSetUpdateHistoryCallback".}
+
+proc setUpdateHistoryCallback*(view: ViewRaw, callback: UpdateHistoryCallback, data: pointer) {.importc: "ulViewSetUpdateHistoryCallback".}
   ## Set callback for when the history (back/forward state) is modified.
 
-proc `needsPaint=`*(view: View, needsPaint: bool) {.importc: "ulViewSetNeedsPaint".}
+proc `needsPaint=`*(view: ViewRaw, needsPaint: bool) {.importc: "ulViewSetNeedsPaint".}
   ## Set whether or not a view should be repainted during the next call to
   ## ulRender.
   ##
   ## .. Note::  This flag is automatically set whenever the page content changes
   ##        but you can set it directly in case you need to force a repaint.
-proc needsPaint*(view: View): bool {.importc: "ulViewGetNeedsPaint".}
+  
+proc needsPaint*(view: ViewRaw): bool {.importc: "ulViewGetNeedsPaint".}
   ## Whether or not a view should be painted during the next call to ulRender.
-proc createInspectorView*(view: View): ViewStrong {.importc: "ulViewCreateInspectorView".}
+  
+proc createInspectorView*(view: ViewRaw): ViewStrong {.importc: "ulViewCreateInspectorView".}
   ## Create an inspector for this View, this is useful for debugging and
   ## inspecting pages locally. This will only succeed if you have the
   ## inspector assets in your filesystem-- the inspector will look for
@@ -522,7 +590,7 @@ proc createInspectorView*(view: View): ViewStrong {.importc: "ulViewCreateInspec
 # Renderer
 #
 
-proc createRenderer*(config: Config): RendererStrong {.importc: "ulCreateRenderer".}
+proc createRenderer*(config: ConfigRaw): RendererStrong {.importc: "ulCreateRenderer".}
   ##
   ## Create the Ultralight Renderer directly.
   ##
@@ -547,32 +615,41 @@ proc createRenderer*(config: Config): RendererStrong {.importc: "ulCreateRendere
   ##         various platform handlers automatically.
   ##
 
-proc update*(renderer: Renderer) {.importc: "ulUpdate".}
+proc update*(renderer: RendererRaw) {.importc: "ulUpdate".}
   ## Update timers and dispatch internal callbacks (JavaScript and network).
-proc render*(renderer: Renderer) {.importc: "ulRender".}
+  
+proc render*(renderer: RendererRaw) {.importc: "ulRender".}
   ## Render all active Views.
-proc purgeMemory*(renderer: Renderer) {.importc: "ulPurgeMemory".}
+  
+proc purgeMemory*(renderer: RendererRaw) {.importc: "ulPurgeMemory".}
   ## Attempt to release as much memory as possible. Don't call this from any
   ## callbacks or driver code.
-proc logMemoryUsage*(renderer: Renderer) {.importc: "ulLogMemoryUsage".}
+  
+proc logMemoryUsage*(renderer: RendererRaw) {.importc: "ulLogMemoryUsage".}
   ## Print detailed memory usage statistics to the log.
   ## (see setPlatformLogger_)
-proc defaultSession*(renderer: Renderer): SessionWeak {.importc: "ulDefaultSession".}
+  
+proc defaultSession*(renderer: RendererRaw): SessionWeak {.importc: "ulDefaultSession".}
   ## Get the default session (persistent session named "default").
+  
 #
 # Session
 #
 
-proc createSession*(renderer: Renderer, persistent: bool, name: ULString) {.importc: "ulCreateSession".}
+proc createSession*(renderer: RendererRaw, persistent: bool, name: ULStringRaw) {.importc: "ulCreateSession".}
   ## Create a Session to store local data in (such as cookies, local storage,
   ## application cache, indexed db, etc).
-proc isPersistent*(session: Session): bool {.importc: "ulSessionIsPersistent".}
+
+proc isPersistent*(session: SessionRaw): bool {.importc: "ulSessionIsPersistent".}
   ## Whether or not is persistent (backed to disk).
-proc name*(session: Session): ULStringWeak {.importc: "ulSessionGetName".}
+
+proc name*(session: SessionRaw): ULStringWeak {.importc: "ulSessionGetName".}
   ## Unique name identifying the session (used for unique disk path).
-proc id*(session: Session): culonglong {.importc: "ulSessionGetId".}
+  
+proc id*(session: SessionRaw): culonglong {.importc: "ulSessionGetId".}
   ## Unique numeric Id for the session.
-proc diskPath*(session: Session): ULStringWeak {.importc: "ulSessionGetDiskPath".}
+  
+proc diskPath*(session: SessionRaw): ULStringWeak {.importc: "ulSessionGetDiskPath".}
   ## The disk path to write to (used by persistent sessions only).
   
 #
@@ -591,7 +668,8 @@ proc setPlatformLogger*(logger: ULLogger) {.importc: "ulPlatformSetLogger".}
 
 proc createViewConfig*(): ViewConfigStrong {.importc: "ulCreateViewConfig".}
   ## Create view configuration with default values
-proc `accelerated=`*(config: ViewConfig, isAccelerated: bool) {.importc: "ulViewConfigSetIsAccelerated".}
+  
+proc `accelerated=`*(config: ViewConfigRaw, isAccelerated: bool) {.importc: "ulViewConfigSetIsAccelerated".}
   ## When enabled, the View will be rendered to an offscreen GPU texture
   ## using the GPU driver set in ulPlatformSetGPUDriver. You can fetch
   ## details for the texture via ulViewGetRenderTarget.
@@ -599,30 +677,41 @@ proc `accelerated=`*(config: ViewConfig, isAccelerated: bool) {.importc: "ulView
   ## When disabled (the default), the View will be rendered to an offscreen
   ## pixel buffer surface. This pixel buffer can optionally be provided by the user--
   ## for more info see surface_.
-proc `transparent=`*(config: ViewConfig, isTransparent: bool) {.importc: "ulViewConfigSetIsTransparent".}
-proc `initialDeviceScale=`*(config: ViewConfig, initalScale: cdouble) {.importc: "ulViewConfigSetInitialDeviceScale".}
+  
+proc `transparent=`*(config: ViewConfigRaw, isTransparent: bool) {.importc: "ulViewConfigSetIsTransparent".}
+
+proc `initialDeviceScale=`*(config: ViewConfigRaw, initalScale: cdouble) {.importc: "ulViewConfigSetInitialDeviceScale".}
   ## Set the amount that the application DPI has been scaled, used for
   ## scaling device coordinates to pixels and oversampling raster shapes
   ## (Default = 1.0).
-proc `initialFocus=`*(config: ViewConfig, isFocused: bool) {.importc: "ulViewConfigSetInitialFocus".}
-proc `enableImages=`*(config: ViewConfig, enabled: bool) {.importc: "ulViewConfigSetEnableImages".}
+  
+proc `initialFocus=`*(config: ViewConfigRaw, isFocused: bool) {.importc: "ulViewConfigSetInitialFocus".}
+
+proc `enableImages=`*(config: ViewConfigRaw, enabled: bool) {.importc: "ulViewConfigSetEnableImages".}
   ## Set whether images should be enabled (Default = True).
-proc `enableJS=`*(config: ViewConfig, enabled: bool) {.importc: "ulViewConfigSetEnableImages".}
+  
+proc `enableJS=`*(config: ViewConfigRaw, enabled: bool) {.importc: "ulViewConfigSetEnableImages".}
   ## Set whether JavaScript should be eanbled (Default = True).
-proc `fontFamilyStandard=`*(config: ViewConfig, fontName: ULString) {.importc: "ulViewConfigSetFontFamilyStandard".}
+  
+proc `fontFamilyStandard=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilyStandard".}
   ## Set default font-family to use (Default = Times New Roman).
-proc `fontFamilyFixed=`*(config: ViewConfig, fontName: ULString) {.importc: "ulViewConfigSetFontFamilyFixed".}
+  
+proc `fontFamilyFixed=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilyFixed".}
   ## Set default font-family to use for fixed fonts, eg <pre> and <code>
   ## (Default = Courier New).
-proc `fontFamilySerif=`*(config: ViewConfig, fontName: ULString) {.importc: "ulViewConfigSetFontFamilySerif".}
+  
+proc `fontFamilySerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilySerif".}
   ## Set default font-family to use for serif fonts (Default = Times New Roman).
-proc `fontFamilySansSerif=`*(config: ViewConfig, fontName: ULString) {.importc: "ulViewConfigSetFontFamilySansSerif".}
+  
+proc `fontFamilySansSerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilySansSerif".}
   ## Set default font-family to use for sans-serif fonts (Default = Arial).
-proc `userAgent=`*(config: ViewConfig, agentString: ULString) {.importc: "ulViewConfigSetUserAgent".}
+  
+proc `userAgent=`*(config: ViewConfigRaw, agentString: ULStringRaw) {.importc: "ulViewConfigSetUserAgent".}
   ## Set user agent string 
+  
 {.pop.}
 
-proc `$`*(str: ULString): string =
+proc `$`*(str: ULStringRaw): string =
   ## Converts an UltraLight string into a nim string
   var data = str.data
   result = newString(str.len) 
@@ -630,10 +719,12 @@ proc `$`*(str: ULString): string =
     result[i] = chr(data[])
     data += 1
 
-proc echoLog(x: LogLevel, y: ULString) {.cdecl.} = 
+proc `$`(str: ULString): string {.inline.} = $str.internal
+
+proc echoLog(x: LogLevel, y: ULStringRaw) {.cdecl.} = 
   echo x, ": ", y
 
-template withJSCtx*(view: View, ctxIdent, body: untyped) =
+template withJSCtx*(view: ViewRaw, ctxIdent, body: untyped) =
   ## Automatically locks the js context, runs body code, then locks context again
   let ctxVar {.inject.} = view.lockJSCtx()
   body
