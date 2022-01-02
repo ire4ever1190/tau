@@ -1,5 +1,7 @@
 import std/[strutils, os]
 import std/[macros, macrocache]
+import std/sugar
+
 ##
 ## This module contains types, procs, and helpers that are used throughout the files.
 ##
@@ -295,8 +297,8 @@ macro wrap(cName: static[string], prc: untyped) =
   ## While this is a chaotic macro, it generates code that otherwise would be very repeatitive and error prone
   echo cName
   let prcName = if prc[0].kind == nnkIdent:
-      prc[0]
-    else:
+      ident ($prc[0]).dup(removePrefix("ul")
+    else: # Means it is more complex like `name=`
       prc[0][^1]
   var 
     params = @[newEmptyNode()] # params to pass

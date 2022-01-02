@@ -60,13 +60,13 @@ proc `fileSystemPath=`*(settings: SettingsRaw, path: ULStringRaw) {.wrap: "ulSet
   ##         - Windows: relative to the executable path
   ##         - Linux:   relative to the executable path
   ##         - macOS:   relative to YourApp.app/Contents/Resources/
-#[
+[
 proc `loadShadersFromFS=`*(settings: SettingsRaw, enabled: bool) {.warp: "ulSettingsSetLoadShadersFromFileSystem".} 
-  ## Set whether or not we should load and compile shaders from the file system
-  ## (eg, from the /shaders/ path, relative to file_system_path).
-  ##
-  ## If this is false (the default), we will instead load pre-compiled shaders
-  ## from memory which speeds up application startup time.
+  # Set whether or not we should load and compile shaders from the file system
+  # (eg, from the /shaders/ path, relative to file_system_path).
+  #
+  # If this is false (the default), we will instead load pre-compiled shaders
+  # from memory which speeds up application startup time.
   ]#
 #
 # App
