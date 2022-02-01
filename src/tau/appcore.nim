@@ -13,12 +13,15 @@ type
   
 {.passL: "-lAppCore".}
 
-static:
-  setWrapInfo("<AppCore/CAPI.h>", DLLAppCore)
+const
+  defaultDynLib = DLLAppCore
+  defaultHeader = "<AppCore/CAPI.h>"
+
+setWrapInfo("<AppCore/CAPI.h>", DLLAppCore)
 
 # {.push header: "<AppCore/CAPI.h>", dynlib: DLLAppCore.}
 
-{.pragma: defC,  dynlib: DLLAppCore, header: "<AppCore/CAPI.h>".}
+#{.pragma: defC,  dynlib: DLLAppCore, header: "<AppCore/CAPI.h>".}
 
 
 #
@@ -60,14 +63,14 @@ proc `fileSystemPath=`*(settings: SettingsRaw, path: ULStringRaw) {.wrap: "ulSet
   ##         - Windows: relative to the executable path
   ##         - Linux:   relative to the executable path
   ##         - macOS:   relative to YourApp.app/Contents/Resources/
-[
-proc `loadShadersFromFS=`*(settings: SettingsRaw, enabled: bool) {.warp: "ulSettingsSetLoadShadersFromFileSystem".} 
-  # Set whether or not we should load and compile shaders from the file system
-  # (eg, from the /shaders/ path, relative to file_system_path).
-  #
-  # If this is false (the default), we will instead load pre-compiled shaders
-  # from memory which speeds up application startup time.
-  ]#
+
+proc `loadShadersFromFS=`*(settings: SettingsRaw, enabled: bool) {.wrap: "ulSettingsSetLoadShadersFromFileSystem".}
+  ## Set whether or not ultralight should load and compile shaders from the file system
+  ## (eg, from the /shaders/ path, relative to file_system_path).
+  ##
+  ## If this is false (the default), Ultralight will instead load pre-compiled shaders
+  ## from memory which speeds up application startup time.
+
 #
 # App
 #
@@ -84,10 +87,10 @@ proc createApp*(settings: SettingsRaw, config: ConfigRaw): AppStrong {.wrap: "ul
   ## .. Note::  Certain Config options may be overridden during App creation,
   ##        most commonly `Config.faceWinding` and `Config.deviceScaleHint`.
   
-proc run*(app: AppRaw) {.importc: "ulAppRun".}
+proc run*(app: AppRaw) {.wrap: "ulAppRun".}
   ## Run the main loop.
   
-proc mainMonitor*(app: AppRaw): MonitorStrong {.importc: "ulAppGetMainMonitor".}
+proc mainMonitor*(app: AppRaw): MonitorStrong {.wrap: "ulAppGetMainMonitor".}
   ## Get the main monitor (this is never `nil`).
   ##
   ## .. Note::  We'll add monitor enumeration later.
@@ -102,13 +105,13 @@ proc setUpdateCallback*(app: AppRaw, callback: UpdateCallback, data: pointer) {.
 proc isRunning*(app: AppRaw): bool {.importc: "ulAppIsRunning".}
   ## Whether or not the App is running.
   
-proc renderer*(app: AppRaw): RendererWeak {.importc: "ulAppGetRenderer".}
+proc renderer*(app: AppRaw): RendererWeak {.wrap: "ulAppGetRenderer".}
   ## Get the underlying Renderer instance.
   
 proc quit*(app: AppRaw) {.importc: "ulAppQuit".}
   ## Quit the application.
   
-proc `window=`*(app: AppRaw, window: WindowRaw) {.importc: "ulAppSetWindow".}
+proc `window=`*(app: AppRaw, window: WindowRaw) {.wrap: "ulAppSetWindow".}
 
 #
 # Monitor
@@ -125,7 +128,7 @@ proc height*(monitor: MonitorRaw): cuint {.importc: "ulMonitorGetHeight".}
 # Window
 #
 
-proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, flags: cuint): WindowStrong {.importc: "ulCreateWindow".}
+proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, flags: cuint): WindowStrong {.importc: "ulCreateWindow", defC.}
   ## Create a new Window.
   ##
   ## **monitor**: The monitor to create the Window on.
@@ -138,20 +141,19 @@ proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, 
   ##
   ## **flags**  Various window flags
   
-proc width*(window: WindowRaw): cuint  {.importc: "ulWindowGetWidth".}
+proc width*(window: WindowRaw): cuint  {.wrap: "ulWindowGetWidth".}
   ## Get window width (in pixels).
   
-proc height*(window: WindowRaw): cuint {.importc: "ulWindowGetHeight".}
+proc height*(window: WindowRaw): cuint {.wrap: "ulWindowGetHeight".}
   ## Get window height (in pixels).
   
-proc screenWidth*(window: WindowRaw): cuint {.importc: "ulWindowGetScreenWidth".}
+proc screenWidth*(window: WindowRaw): cuint {.wrap: "ulWindowGetScreenWidth".}
   ## Get window width (in screen coordinates).
   
-proc screenHeight*(window: WindowRaw): cuint {.importc: "ulWindowGetScreenHeight".}
+proc screenHeight*(window: WindowRaw): cuint {.wrap: "ulWindowGetScreenHeight".}
   ## Get window height (in screen coordinates).
   
-proc setResizeCallback*(window: WindowRaw, callback: ResizeCallback, data: pointer) {.importc: "ulWindowSetResizeCallback".}
-proc setResizeCallback*(window: WindowRaw, callback: pointer, data: pointer) {.importc: "ulWindowSetResizeCallback".}
+proc setResizeCallback*(window: WindowRaw, callback: ResizeCallback, data: pointer) {.wrap: "ulWindowSetResizeCallback".}
   ## Set a callback to be notified when a window resizes
   ## (parameters are passed back in pixels).
   ## This is needed to make the window overlay resize when making an application
@@ -212,7 +214,7 @@ proc nativeHandle*(window: WindowRaw): pointer {.importc: "ulWindowGetNativeHand
   ##                 - NSWindow* on macOS
   ##                 - GLFWwindow* on Linux
   
-proc `title=`*(window: WindowRaw, title: cstring) {.importc: "ulWindowSetTitle".}
+proc `title=`*(window: WindowRaw, title: cstring) {.wrap: "ulWindowSetTitle".}
   ## Set the window title.
   
 proc `cursor=`*(window: WindowRaw, cursor: Cursor) {.importc: "ulWindowSetCursor".}
@@ -222,22 +224,22 @@ proc `cursor=`*(window: WindowRaw, cursor: Cursor) {.importc: "ulWindowSetCursor
 # Overlay
 #
 
-proc createOverlay*(window: WindowRaw, width, height: cuint, x, y: cint): OverlayStrong {.importc: "ulCreateOverlay".}
+proc createOverlay*(window: WindowRaw, width, height: cuint, x, y: cint): OverlayStrong {.wrap: "ulCreateOverlay".}
   ## Create a new Overlay.
   ##
-  ## **window**  The window to create the Overlay in.
+  ## * **window**  The window to create the Overlay in.
   ##
-  ## **width**   The width in pixels.
+  ## * **width**   The width in pixels.
   ##
-  ## **height**  The height in pixels.
+  ## * **height**  The height in pixels.
   ##
-  ## **x**       The x-position (offset from the left of the Window), in pixels.
+  ## * **x**       The x-position (offset from the left of the Window), in pixels.
   ##
-  ## **y**       The y-position (offset from the top of the Window), in pixels.
+  ## * **y**       The y-position (offset from the top of the Window), in pixels.
   ##
   ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should create the Overlay then load content into the underlying View.
   
-proc createOverlay*(window: WindowRaw, view: View, x, y: cint): OverlayStrong {.importc: "ulCreateOverlayWithView".}
+proc createOverlay*(window: WindowRaw, view: ViewRaw, x, y: cint): OverlayStrong {.wrap: "ulCreateOverlayWithView".}
   ## Create a new Overlay, wrapping an existing View.
   ##
   ## **window**  The window to create the Overlay in. (Ultralight currently only supports one window per application)
@@ -250,9 +252,9 @@ proc createOverlay*(window: WindowRaw, view: View, x, y: cint): OverlayStrong {.
   ##
   ## .. Note::  Each Overlay is essentially a View and an on-screen quad. You should create the Overlay then load content into the underlying View
   
-proc view*(overlay: OverlayRaw): ViewWeak {.importc: "ulOverlayGetView".}
+proc view*(overlay: OverlayRaw): ViewWeak {.wrap: "ulOverlayGetView".}
   ## Get the underlying View.
-proc resize*(overlay: OverlayRaw, width, height: cuint) {.importc: "ulOverlayResize".}
+proc resize*(overlay: OverlayRaw, width, height: cuint) {.wrap: "ulOverlayResize".}
   ## Resize the overlay (and underlying View), dimensions should be
   ## specified in pixels.
 proc width*(overlay: OverlayRaw): cuint {.importc: "ulOverlayGetWidth".}
@@ -311,19 +313,10 @@ proc createSettings*(): Settings {.inline.} =
 
 proc createOverlay*(window: Window, x, y: int = 0): Overlay =
   ## Creates an overlay that is the size of the window at coordinates x and y
-  # window.internal.createOverlay(window.width, window.height, cint x, cint y)
+  wrap window.internal.createOverlay(window.width, window.height, cint x, cint y)
 
 
 proc createWindow*(monitor: Monitor, width, height: uint, fullscreen: bool, flags: set[WindowFlags]): Window {.inline.} =
   ## Creates a window that is on a monitor
-  # monitor.internal.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))
+  wrap monitor.internal.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))
 
-
-proc createOverlay*(window: WindowRaw, x, y: int = 0): Overlay =
-  ## Creates an overlay that is the size of the window at coordinates x and y
-  window.createOverlay(window.width, window.height, cint x, cint y)
-
-
-proc createWindow*(monitor: Monitor, width, height: uint, fullscreen: bool, flags: set[WindowFlags]): Window {.inline.} =
-  ## Creates a window that is on a monitor
-  monitor.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))

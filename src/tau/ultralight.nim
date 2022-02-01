@@ -1,22 +1,20 @@
-import common
+import common {.all.}
 import ptr_math
-import javascriptcorelow
+import javascriptcore
 
 {.passL: "-lUltralight".}
 {.passL: "-lUltralightCore".}
 
 const headerFile = "<Ultralight/CAPI.h>"
 
-const
-  defaultHeader = headerFile
-  defaulDynLib = DLLUltraLight
 
 when defined(windows):
   type ULFileHandle = distinct csize_t
 else:
   type ULFileHandle = distinct cint
 
-const invalidFileHande = ULFileHandle(-1)
+const invalidFileHandle = ULFileHandle(-1)
+
 
 type
   Rect* {.bycopy.} = object
@@ -47,8 +45,6 @@ type
     Warning
     Info
 
-  Surface*     = distinct ULPtr
-  BitmapSurface* = distinct Surface
   
 {.push cdecl.} # Only pushing cdecl seems to work
 type
@@ -106,19 +102,23 @@ type
     unlock_pixels*: SurfaceDefinitionUnlockPixelsCallback
     resize*: SurfaceDefinitionResizeCallback
 
-{.push dynlib: DLLUltraLight, header: headerFile.}
+type
+  JSError = CatchableError
+    ## Error raised during execution of JS
+
+setWrapInfo(headerFile, DLLUltraLight)
 
 #
 # Version info
 #
 
-proc versionString*(): cstring {.importc: "ulVersionString".}
+proc versionString*(): cstring {.wrap: "ulVersionString".}
   ## Get the version string of the library in MAJOR.MINOR.PATCH format.
-proc versionMajor*(): cuint {.importc: "ulVersionMajor".}
+proc versionMajor*(): cuint {.wrap: "ulVersionMajor".}
   ## Get the numeric major version of the library.
-proc versionMinor*(): cuint {.importc: "ulVersionMinor".}
+proc versionMinor*(): cuint {.wrap: "ulVersionMinor".}
   ## Get the numeric minor version of the library.
-proc versionPatch*(): cuint {.importc: "ulVersionPatch".}
+proc versionPatch*(): cuint {.wrap: "ulVersionPatch".}
   ## Get the numeric patch version of the library.
   
 
@@ -126,16 +126,18 @@ proc versionPatch*(): cuint {.importc: "ulVersionPatch".}
 # String
 #
   
-proc ulString*(str: cstring): ULStringStrong {.importc: "ulCreateString".}
-  ## Create string from `cstring`.
+proc ulStringRaw*(str: cstring): ULStringStrong {.wrap: "ulCreateString".}
+  ## Create string that Ultralight likes.
+
+proc ulString*(str: string): ULString =
+  ## Wraps ulStringRaw_
+  result = wrap ulStringRaw(str)
   
-proc ulString*(str: cstring, len: csize_t): ULStringStrong {.importc: "ulCreateStringUTF8".}
+proc ulStringRaw*(str: cstring, len: csize_t): ULStringStrong {.wrap: "ulCreateStringUTF8".}
   ## Create string from UTF-8 buffer.
   
-proc ulString*(str: ptr ULChar16, len: csize_t): ULStringStrong {.importc: "ulCreateStringUTF16".}
-  ## Create string from UTF-16 buffer.
   
-proc copy*(str: ULStringRaw): ULStringStrong {.importc: "ulCreateStringFromCopy".}
+proc copy*(str: ULStringRaw): ULStringStrong {.wrap: "ulCreateStringFromCopy".}
   ## Create string from copy of existing string.
   ## This is useful in making your own copy of a weak string returned from a proc  
   
@@ -145,10 +147,10 @@ proc `copy=`*(dest: var ULStringStrong, src: ULStringRaw) =
     wasMoved(dest)
     dest = copy src
     
-proc len*(str: ULStringRaw): cint {.importc: "ulStringGetLength".}
+proc len*(str: ULStringRaw): cint {.wrap: "ulStringGetLength".}
   ## Get length in UTF-16 characters.
-  
-proc data*(str: ULStringRaw): ptr ULChar16 {.importc: "ulStringGetData".}
+
+proc data*(str: ULStringRaw): ptr ULChar16 {.importc: "ulStringGetData", defC.}
   ## Get internal UTF-16 buffer data.
 
 proc isEmpty*(str: ULStringRaw): bool {.importc: "ulStringIsEmpty".}
@@ -160,6 +162,15 @@ proc assign*(str: ULStringRaw, newStr: ULStringRaw) {.importc: "ulStringAssignSt
   
 proc assign*(str: ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCString".}
   ## Replaces the contents of **str** with the contents of a `cstring`.
+
+proc copyTo*(str: ULStringRaw, newStr: var string) =
+  ## Copies `str` to `newStr`
+  newStr = newString str.len
+  let data = cast[ptr UncheckedArray[ULChar16]](str.data)
+  for i in 0..<str.len:
+    newStr[i] = chr(data[][i])
+
+
 #
 # Bitmap
 #
@@ -258,30 +269,38 @@ proc makeEmptyIntRect*(): IntRect {.importc: "ulIntRectMakeEmpty".}
 # Surface
 #
 
-proc width*(surface: Surface): cuint {.importc: "ulSurfaceGetWidth".} 
+proc width*(surface: SurfaceRaw): cuint {.importc: "ulSurfaceGetWidth".}
   ## Width (in pixels).
-proc height*(surface: Surface): cuint {.importc: "ulSurfaceGetHeight".} 
+
+proc height*(surface: SurfaceRaw): cuint {.importc: "ulSurfaceGetHeight".}
   ## Height (in pixels).
-proc rowBytes*(surface: Surface): cuint {.importc: "ulSurfaceGetRowBytes".}
+
+proc rowBytes*(surface: SurfaceRaw): cuint {.importc: "ulSurfaceGetRowBytes".}
   ## Number of bytes between rows (usually width * 4)
-proc len*(surface: Surface): csize_t {.importc: "ulSurfaceGetSize".}
+
+proc len*(surface: SurfaceRaw): csize_t {.importc: "ulSurfaceGetSize".}
   ## Size in bytes.
-proc lockPixels*(surface: Surface): pointer {.importc: "ulSurfaceLockPixels".}
+
+proc lockPixels*(surface: SurfaceRaw): pointer {.importc: "ulSurfaceLockPixels".}
   ## Lock the pixel buffer and get a pointer to the beginning of the data
   ## for reading/writing.
   ##
   ## Native pixel format is premultiplied BGRA 32-bit (8 bits per channel).
-proc unlockPixels*(surface: Surface) {.importc: "ulSurfaceUnlockPixels".}
+
+proc unlockPixels*(surface: SurfaceRaw) {.importc: "ulSurfaceUnlockPixels".}
   ## Unlock the pixel buffer.
-proc resize*(surface: Surface, width, height: cuint) {.importc: "ulSurfaceResize".}
+
+proc resize*(surface: SurfaceRaw, width, height: cuint) {.wrap: "ulSurfaceResize".}
   ## Resize the pixel buffer to a certain width and height (both in pixels).
   ##
   ## This should never be called while pixels are locked.
-proc clearDirtyBounds*(surface: Surface) {.importc: "ulSurfaceClearDirtyBounds".}
+
+proc clearDirtyBounds*(surface: SurfaceRaw) {.importc: "ulSurfaceClearDirtyBounds".}
   ## Clear the dirty bounds.
   ##
   ## You should call this after you're done displaying the Surface.
-proc dirtyBounds*(surface: Surface): IntRect {.importc: "ulSurfaceGetDirtyBounds".}
+
+proc dirtyBounds*(surface: SurfaceRaw): IntRect {.importc: "ulSurfaceGetDirtyBounds".}
   ## Get the dirty bounds.
   ##
   ## This value can be used to determine which portion of the pixel buffer has
@@ -298,25 +317,31 @@ proc dirtyBounds*(surface: Surface): IntRect {.importc: "ulSurfaceGetDirtyBounds
   ##
   ##     # Once you're done, clear the dirty bounds:
   ##     surface.clearDirtyBounds()
-proc userData*(surface: Surface): pointer {.importc: "ulSurfaceGetUserData".}
+
+proc userData*(surface: SurfaceRaw): pointer {.importc: "ulSurfaceGetUserData".}
   ## Get the underlying user data pointer (this is only valid if you have
   ## set a custom surface implementation via ulPlatformSetSurfaceDefinition).
   ##
-  ## This will return nullptr if this surface is the default ULBitmapSurface.
-proc `dirtyBounds=`*(surface: Surface, bounds: IntRect) {.importc: "ulSurfaceSetDirtyBounds".}
+  ## This will return `nil` if this surface is the default ULBitmapSurface.
+
+proc `dirtyBounds=`*(surface: SurfaceRaw, bounds: IntRect) {.importc: "ulSurfaceSetDirtyBounds".}
   ## Set the dirty bounds to a certain value.
   ##
   ## This is called after the Renderer paints to an area of the pixel buffer.
   ## (The new value will be joined with the existing dirty_bounds())
-proc bitmap*(surface: BitmapSurface) {.importc: "ulBitmapSurfaceGetBitmap".}
+
+proc bitmap*(surface: BitmapSurfaceRaw) {.importc: "ulBitmapSurfaceGetBitmap".}
   ## Get the underlying Bitmap from the default Surface.
 
 #
 # Config
 #
   
-proc createConfig*(): ConfigStrong {.importc: "ulCreateConfig".}
+proc ulCreateConfig*(): ConfigStrong {.importc: "ulCreateConfig", defC.}
   ## Create config with default values
+
+proc createConfig*(): Config = wrap ulCreateConfig()
+
 proc `resourcePath=`*(config: ConfigRaw, path: ULStringRaw) {.importc: "ulConfigSetResourcePath".}
   ## Set the file path to the directory that contains Ultralight's bundled
   ## resources (eg, cacert.pem and other localized resources).
@@ -416,13 +441,13 @@ proc surface*(view: ViewRaw): Surface {.importc: "ulViewGetSurface".}
   ##        bitmap by casting `Surface` to `BitmapSurface` and calling
   ##        bitmap_.
 
-proc loadURL*(view: ViewRaw, url: ULStringRaw) {.importc: "ulViewLoadURL".}
+proc loadURL*(view: ViewRaw, url: ULStringRaw) {.wrap: "ulViewLoadURL".}
   ## Load a URL into main frame.
   
 proc loadHTML*(view: ViewRaw, html: ULStringRaw) {.importc: "ulViewLoadHTML".}
   ## Load a raw string of HTML.
 
-proc lockJSCtx*(view: ViewRaw): JSContextRef {.importc: "ulViewLockJSContext".}
+proc lockJSCtx*(view: ViewRaw): JSContextRef {.wrap: "ulViewLockJSContext".}
   ## Acquire the page's JSContext for use with JavaScriptCore API.
   ## 
   ## .. Note::  This call locks the context for the current thread. You should
@@ -432,10 +457,10 @@ proc lockJSCtx*(view: ViewRaw): JSContextRef {.importc: "ulViewLockJSContext".}
   ## .. Note::  The lock is recusive, it's okay to call this multiple times as long
   ##        as you call unlockJSCtx_ the same number of times.
   
-proc unlockJSCtx*(view: ViewRaw) {.importc: "ulViewUnlockJSContext".}
+proc unlockJSCtx*(view: ViewRaw) {.wrap: "ulViewUnlockJSContext".}
   ## Unlock the page's JSContext after a previous call to lockJSCtx_.
   
-proc evalScript*(view: ViewRaw, js: ULStringRaw, exception: ptr ULStringWeak): ULStringWeak {.importc: "ulViewEvaluateScript".}
+proc evalScript*(view: ViewRaw, js: ULStringRaw, exception: ptr ULStringWeak): ULStringWeak {.importc: "ulViewEvaluateScript", defC.}
   ##
   ## Evaluate a string of JavaScript and return result.
   ##
@@ -451,6 +476,15 @@ proc evalScript*(view: ViewRaw, js: ULStringRaw, exception: ptr ULStringWeak): U
   ##  var exception: ULStringWeak # Owned by view, not us
   ##  let result = view.evalScript(script, addr exception)
   ##  assert result == ulString"2"
+
+proc evalScript*(view: View, js: string | ULString): string =
+  ## Evaluates a string of JavaScript and returns result.
+  ## Will raise a JSError_ exception if something goes wrong during execution
+  var exception: ULStringWeak
+  let output = view.internal.evalScript(pass js, addr exception)
+  if exception != nil:
+    raise (ref JSError)(msg: $exception)
+  output.copyTo(result)
   
 proc canGoBack*(view: ViewRaw): bool {.importc: "ulViewCanGoBack".}
   ## Check if can navigate backwards in history.
@@ -555,7 +589,7 @@ proc setWindowObjectReadyCallback*(view: ViewRaw, callback: WindowObjectReadyCal
   ## The window object is lazily initialized (this will not be called on pages
   ## with no scripts).
   
-proc setDOMReadyCallback*(view: ViewRaw, callback: DOMReadyCallback, data: pointer) {.importc: "ulViewSetDOMReadyCallback".}
+proc setDOMReadyCallback*(view: ViewRaw, callback: DOMReadyCallback, data: pointer) {.wrap: "ulViewSetDOMReadyCallback".}
   ## Set callback for when all JavaScript has been parsed and the document is
   ## ready.
   ##
@@ -629,7 +663,7 @@ proc logMemoryUsage*(renderer: RendererRaw) {.importc: "ulLogMemoryUsage".}
   ## Print detailed memory usage statistics to the log.
   ## (see setPlatformLogger_)
   
-proc defaultSession*(renderer: RendererRaw): SessionWeak {.importc: "ulDefaultSession".}
+proc defaultSession*(renderer: RendererRaw): SessionWeak {.wrap: "ulDefaultSession".}
   ## Get the default session (persistent session named "default").
   
 #
@@ -709,24 +743,19 @@ proc `fontFamilySansSerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.imp
 proc `userAgent=`*(config: ViewConfigRaw, agentString: ULStringRaw) {.importc: "ulViewConfigSetUserAgent".}
   ## Set user agent string 
   
-{.pop.}
 
 proc `$`*(str: ULStringRaw): string =
   ## Converts an UltraLight string into a nim string
-  var data = str.data
-  result = newString(str.len) 
-  for i in 0..<str.len:
-    result[i] = chr(data[])
-    data += 1
+  str.copyTo(result)
 
-proc `$`(str: ULString): string {.inline.} = $str.internal
+proc `$`*(str: ULString): string {.inline.} = $str.internal
 
 proc echoLog(x: LogLevel, y: ULStringRaw) {.cdecl.} = 
-  echo x, ": ", y
+  echo x, ": ", $y
 
 template withJSCtx*(view: ViewRaw, ctxIdent, body: untyped) =
   ## Automatically locks the js context, runs body code, then locks context again
-  let ctxVar {.inject.} = view.lockJSCtx()
+  let ctxIdent {.inject.} = view.lockJSCtx()
   body
   view.unlockJSCtx()
 
