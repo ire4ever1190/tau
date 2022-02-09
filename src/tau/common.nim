@@ -28,9 +28,14 @@ const
   DLLUltraLight*     = "libUltralight.so"
   DLLWebCore*        = "libWebCore.so"
 
+
+{.passL: "-lWebCore".}
+{.passL: "-lUltralight".}
+{.passL: "-lUltralightCore".}
+
 {.passC: "-I" & headerFolder.}
 
-const ultraLightVersion = "1.2.0" # Supported version
+const ultraLightVersion = "1.3.0" # Supported version
 
 template cAPI(module: string): string = 
   ## Returns relative path to cAPI header for certain module
@@ -101,11 +106,11 @@ type
     Other
 
   MessageLevel* = enum
-    kMessageLevel_Log = 1
-    kMessageLevel_Warning = 2
-    kMessageLevel_Error = 3
-    kMessageLevel_Debug = 4
-    kMessageLevel_Info = 5
+    Log = 1
+    Warning = 2
+    Error = 3
+    Debug = 4
+    Info = 5
 
   BitmapFormat* = enum
     ## **A8_UNORM**
@@ -222,7 +227,7 @@ macro importType(kind: untyped, name: static[string] = "") =
       `strongIdent`* {.importc: `cAPIName`, pure, final.} = ptr ptr object
       `weakIdent`* {.importc: `cAPIName`, pure, final.} = ptr ptr object 
       `rawTypeIdent`* = `strongIdent` | `weakIdent`
-      `typeIdent`* = WrapperObject[`weakIdent`] | WrapperObject[`strongIdent`]
+      `typeIdent`* = WrapperObject[`rawTypeIdent`] | WrapperObject[`strongIdent`]
 
 
 importType ULConfig

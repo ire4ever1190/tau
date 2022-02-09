@@ -1,0 +1,39 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Unit Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        nim: [ '1.6.2', 'devel' ]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup nim
+        uses: jiro4989/setup-nim-action@v1
+        with:
+          nim-version: ${{ matrix.nim }}
+
+      - name: Install UltraLight
+        run: |
+          sudo apt install wget p7zip-full libpcre2-dev libpulse-dev
+          wget https://ultralight-sdk.sfo2.cdn.digitaloceanspaces.com/ultralight-sdk-latest-linux-x64.7z -O sdk.7z
+          7z x sdk.7z
+          cp bin/*.so* .
+          
+      - name: Pull in submodules
+        run: git submodule update --init
+
+      - name: Run tests
+        run: LD_LIBRARY_PATH=bin/ nimble --passL:"-Lbin" --gc:arc -y test

@@ -8,8 +8,8 @@ type
     Maximizable
     Hidden
 
-  UpdateCallback* = proc (data: pointer)
-  CloseCallback*  = proc (data: pointer, window: WindowRaw)
+  UpdateCallback* = proc (data: pointer) {.nimcall, cdecl.}
+  CloseCallback*  = proc (data: pointer, window: WindowRaw) {.nimcall, cdecl.}
   
 {.passL: "-lAppCore".}
 
@@ -19,9 +19,6 @@ const
 
 setWrapInfo("<AppCore/CAPI.h>", DLLAppCore)
 
-# {.push header: "<AppCore/CAPI.h>", dynlib: DLLAppCore.}
-
-#{.pragma: defC,  dynlib: DLLAppCore, header: "<AppCore/CAPI.h>".}
 
 
 #
@@ -108,7 +105,7 @@ proc isRunning*(app: AppRaw): bool {.importc: "ulAppIsRunning".}
 proc renderer*(app: AppRaw): RendererWeak {.wrap: "ulAppGetRenderer".}
   ## Get the underlying Renderer instance.
   
-proc quit*(app: AppRaw) {.importc: "ulAppQuit".}
+proc quit*(app: AppRaw) {.wrap: "ulAppQuit".}
   ## Quit the application.
   
 proc `window=`*(app: AppRaw, window: WindowRaw) {.wrap: "ulAppSetWindow".}
@@ -164,14 +161,14 @@ proc setResizeCallback*(window: WindowRaw, callback: ResizeCallback, data: point
   ##     cast[OverlayWeak](data).resize(width, height)
   ##   window.setResizeCallback(onResize, overlay.pointer)
   
-proc setCloseCallback*(window: WindowRaw, callback: CloseCallback, data: pointer) {.importc: "ulWindowSetCloseCallback".}
+proc setCloseCallback*(window: WindowRaw, callback: CloseCallback, data: pointer) {.wrap: "ulWindowSetCloseCallback".}
   ## Set a callback to be notified when a window closes.
   
-proc moveTo*(window: WindowRaw, x, y: cint) {.importc: "ulWindowMoveTo".}
+proc moveTo*(window: WindowRaw, x, y: cint) {.wrap: "ulWindowMoveTo".}
   ## Move the window to a new position (in screen coordinates) relative to the top-left of the
   ## monitor area.
   
-proc moveToCenter*(window: WindowRaw) {.importc: "ulWindowMoveToCenter".}
+proc moveToCenter*(window: WindowRaw) {.wrap: "ulWindowMoveToCenter".}
   ## Move the window to the center of the monitor.
   
 proc x*(window: WindowRaw): cint {.importc: "ulWindowGetPositionX".}
@@ -194,10 +191,10 @@ proc scale*(window: WindowRaw): cdouble {.importc: "ulWindowGetScale".}
 proc show*(window: WindowRaw) {.importc: "ulWindowShow".}
   ## Show the window (if it was previously hidden).
   
-proc hide*(window: WindowRaw) {.importc: "ulWindowHide".}
+proc hide*(window: WindowRaw) {.wrap: "ulWindowHide".}
   ## Hide the window.
   
-proc close*(window: WindowRaw) {.importc: "ulWindowClose".}
+proc close*(window: WindowRaw) {.wrap: "ulWindowClose".}
   ## Close a window.
   
 proc screenToPixels*(window: WindowRaw, val: cint) {.importc: "ulWindowScreenToPixels".}
@@ -284,25 +281,28 @@ proc unfocus*(overlay: OverlayRaw) {.importc: "ulOverlayUnfocus".}
 # Platform
 #
 
-proc enablePlatformFontLoader() {.importc: "ulEnablePlatformFontLoader".}
+proc enablePlatformFontLoader*() {.importc: "ulEnablePlatformFontLoader", defC.}
   ## This is only needed if you are not calling createApp_.
   ##
   ## Initializes the platform font loader and sets it as the current FontLoader.
-proc enablePlatformFileSystem(baseDir: ULStringRaw) {.importc: "ulEnablePlatformFileSystem".}
+  
+proc enablePlatformFileSystem*(baseDir: ULStringRaw) {.wrap: "ulEnablePlatformFileSystem".}
   ## This is only needed if you are not calling createApp_.
   ##
   ## Initializes the platform file system (needed for loading file:///URLs) and
   ## sets it as the current FileSystem.
   ##
   ## You can specify a base directory path to resolve relative paths against.
-proc enableDefaultLogger(logPath: ULStringRaw) {.importc: "ulEnableDefaultLogger".}
+  
+proc enableDefaultLogger*(logPath: ULStringRaw) {.wrap: "ulEnableDefaultLogger".}
   ## This is only needed if you are not calling createApp_.
   ##
   ## Initializes the default logger (writes the log to a file).
   ##
   ## You should specify a writable log path to write the log to 
   ## for example "./ultralight.log".
-# {.pop.}
+
+
 
 proc createSettings*(): Settings {.inline.} =
   result = wrap ulCreateSettings()
@@ -316,7 +316,7 @@ proc createOverlay*(window: Window, x, y: int = 0): Overlay =
   wrap window.internal.createOverlay(window.width, window.height, cint x, cint y)
 
 
-proc createWindow*(monitor: Monitor, width, height: uint, fullscreen: bool, flags: set[WindowFlags]): Window {.inline.} =
+proc createWindow*(monitor: Monitor, width, height: uint, fullscreen = false, flags = {Titled}): Window {.inline.} =
   ## Creates a window that is on a monitor
   wrap monitor.internal.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))
 

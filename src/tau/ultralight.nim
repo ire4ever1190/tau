@@ -2,8 +2,6 @@ import common {.all.}
 import ptr_math
 import javascriptcore
 
-{.passL: "-lUltralight".}
-{.passL: "-lUltralightCore".}
 
 const headerFile = "<Ultralight/CAPI.h>"
 
@@ -166,9 +164,12 @@ proc assign*(str: ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCStrin
 proc copyTo*(str: ULStringRaw, newStr: var string) =
   ## Copies `str` to `newStr`
   newStr = newString str.len
-  let data = cast[ptr UncheckedArray[ULChar16]](str.data)
+  let data = cast[ptr UncheckedArray[uint8]](str.data)
+  # let test = cast[WideCString](str.data)
+  # echo test
+  # newStr = $test
   for i in 0..<str.len:
-    newStr[i] = chr(data[][i])
+    newStr[i] = chr(data[][i] and 0x00FF)
 
 
 #
@@ -405,7 +406,7 @@ proc `minSmallHeapSize=`*(config: ConfigRaw, size: cuint) {.importc: "ulConfigSe
 # View
 #
 
-proc createView*(renderer: RendererRaw, width, height: cuint, config: ViewConfigRaw, session: SessionRaw) {.importc: "ulCreateView".}
+proc createView*(renderer: RendererRaw, width, height: cuint, config: ViewConfigRaw, session: SessionRaw): ViewStrong {.wrap: "ulCreateView".}
   ## Create a View with certain size (in pixels).
   ##
   ## .. Note::  You can pass `nil` to **session** to use the default session.
@@ -444,7 +445,7 @@ proc surface*(view: ViewRaw): Surface {.importc: "ulViewGetSurface".}
 proc loadURL*(view: ViewRaw, url: ULStringRaw) {.wrap: "ulViewLoadURL".}
   ## Load a URL into main frame.
   
-proc loadHTML*(view: ViewRaw, html: ULStringRaw) {.importc: "ulViewLoadHTML".}
+proc loadHTML*(view: ViewRaw, html: ULStringRaw) {.wrap: "ulViewLoadHTML".}
   ## Load a raw string of HTML.
 
 proc lockJSCtx*(view: ViewRaw): JSContextRef {.wrap: "ulViewLockJSContext".}
@@ -538,23 +539,23 @@ proc fireEvent*(view: ViewRaw, event: MouseEventRaw) {.importc: "ulViewFireMouse
 proc fireEvent*(view: ViewRaw, event: ScrollEventRaw) {.importc: "ulViewFireScrollEvent".}
   ## Fire a scroll event.
 
-proc setChangeTitleCallback*(view: ViewRaw, callback: ChangeTitleCallback, data: pointer) {.importc: "ulViewSetChangeTitleCallback".}
+proc setChangeTitleCallback*(view: ViewRaw, callback: ChangeTitleCallback, data: pointer) {.wrap: "ulViewSetChangeTitleCallback".}
   ## Set callback for when the page title changes.
   
-proc setChangeURLCallback*(view: ViewRaw, callback: ChangeURLCallback, data: pointer) {.importc: "ulViewSetChangeURLCallback".}
+proc setChangeURLCallback*(view: ViewRaw, callback: ChangeURLCallback, data: pointer) {.wrap: "ulViewSetChangeURLCallback".}
   ## Set callback for when the page URL changes.
   
-proc setChangeTooltipCallback*(view: ViewRaw, calback: ChangeTooltipCallback, data: pointer) {.importc: "ulViewSetChangeTooltipCallback".}
+proc setChangeTooltipCallback*(view: ViewRaw, calback: ChangeTooltipCallback, data: pointer) {.wrap: "ulViewSetChangeTooltipCallback".}
   ## Set callback for when the tooltip changes (usually result of a mouse hover).
   
-proc setChangeCursorCallback*(view: ViewRaw, callback: ChangeCursorCallback, data: pointer) {.importc: "ulViewSetChangeCursorCallback".}
+proc setChangeCursorCallback*(view: ViewRaw, callback: ChangeCursorCallback, data: pointer) {.wrap: "ulViewSetChangeCursorCallback".}
   ## Set callback for when the mouse cursor changes.
   
-proc setAddConsoleMessageCallback*(view: ViewRaw, callback: AddConsoleMessageCallback, data: pointer) {.importc: "ulViewSetAddConsoleMessageCallback".}
+proc setAddConsoleMessageCallback*(view: ViewRaw, callback: AddConsoleMessageCallback, data: pointer) {.wrap: "ulViewSetAddConsoleMessageCallback".}
   ## Set callback for when a message is added to the console (useful for
   ## JavaScript / network errors and debugging).
   
-proc setCreateChildViewCallback*(view: ViewRaw, callback: CreateChildViewCallback, data: pointer) {.importc: "ulViewSetCreateChildViewCallback".}
+proc setCreateChildViewCallback*(view: ViewRaw, callback: CreateChildViewCallback, data: pointer) {.wrap: "ulViewSetCreateChildViewCallback".}
   ## Set callback for when the page wants to create a new View.
   ##
   ## This is usually the result of a user clicking a link with target="_blank"
@@ -566,16 +567,16 @@ proc setCreateChildViewCallback*(view: ViewRaw, callback: CreateChildViewCallbac
   ##
   ## You should return `nil` if you want to block the action.
   
-proc setBeginLoadingCallback*(view: ViewRaw, callback: BeginLoadingCallback, data: pointer) {.importc: "ulViewSetBeginLoadingCallback".}
+proc setBeginLoadingCallback*(view: ViewRaw, callback: BeginLoadingCallback, data: pointer) {.wrap: "ulViewSetBeginLoadingCallback".}
   ## Set callback for when the page begins loading a new URL into a frame.
   
-proc setFinishLoadingCallback*(view: ViewRaw, callback: FinishLoadingCallback, data: pointer) {.importc: "ulViewSetFinishLoadingCallback".}
+proc setFinishLoadingCallback*(view: ViewRaw, callback: FinishLoadingCallback, data: pointer) {.wrap: "ulViewSetFinishLoadingCallback".}
   ## Set callback for when the page finishes loading a URL into a frame.
   
-proc setFailLoadingCallback*(view: ViewRaw, callback: FailLoadingCallback, data: pointer) {.importc: "ulViewSetFailLoadingCallback".}
+proc setFailLoadingCallback*(view: ViewRaw, callback: FailLoadingCallback, data: pointer) {.wrap: "ulViewSetFailLoadingCallback".}
   ## Set callback for when an error occurs while loading a URL into a frame.
   
-proc setWindowObjectReadyCallback*(view: ViewRaw, callback: WindowObjectReadyCallback, data: pointer) {.importc: "ulViewSetWindowObjectReadyCallback".}
+proc setWindowObjectReadyCallback*(view: ViewRaw, callback: WindowObjectReadyCallback, data: pointer) {.wrap: "ulViewSetWindowObjectReadyCallback".}
   ## Set callback for when the JavaScript window object is reset for a new
   ## page load.
   ##
@@ -596,7 +597,7 @@ proc setDOMReadyCallback*(view: ViewRaw, callback: DOMReadyCallback, data: point
   ## This is the best time to make any JavaScript calls that are dependent on
   ## DOM elements or scripts on the page.
 
-proc setUpdateHistoryCallback*(view: ViewRaw, callback: UpdateHistoryCallback, data: pointer) {.importc: "ulViewSetUpdateHistoryCallback".}
+proc setUpdateHistoryCallback*(view: ViewRaw, callback: UpdateHistoryCallback, data: pointer) {.wrap: "ulViewSetUpdateHistoryCallback".}
   ## Set callback for when the history (back/forward state) is modified.
 
 proc `needsPaint=`*(view: ViewRaw, needsPaint: bool) {.importc: "ulViewSetNeedsPaint".}
@@ -624,7 +625,7 @@ proc createInspectorView*(view: ViewRaw): ViewStrong {.importc: "ulViewCreateIns
 # Renderer
 #
 
-proc createRenderer*(config: ConfigRaw): RendererStrong {.importc: "ulCreateRenderer".}
+proc ulCreateRenderer*(config: ConfigRaw): RendererStrong {.importc, defC.}
   ##
   ## Create the Ultralight Renderer directly.
   ##
@@ -649,6 +650,9 @@ proc createRenderer*(config: ConfigRaw): RendererStrong {.importc: "ulCreateRend
   ##         various platform handlers automatically.
   ##
 
+proc createRenderer*(config: Config | ConfigRaw): Renderer = 
+  result = wrap ulCreateRenderer(pass config)
+
 proc update*(renderer: RendererRaw) {.importc: "ulUpdate".}
   ## Update timers and dispatch internal callbacks (JavaScript and network).
   
@@ -670,9 +674,12 @@ proc defaultSession*(renderer: RendererRaw): SessionWeak {.wrap: "ulDefaultSessi
 # Session
 #
 
-proc createSession*(renderer: RendererRaw, persistent: bool, name: ULStringRaw) {.importc: "ulCreateSession".}
+proc ulCreateSession*(renderer: RendererRaw, persistent: bool, name: ULStringRaw): SessionStrong {.importc, defC.}
   ## Create a Session to store local data in (such as cookies, local storage,
   ## application cache, indexed db, etc).
+
+proc createSession*(renderer: Renderer | RendererRaw, persistent: bool, name: ULString | string): Session =
+  result = wrap ulCreateSession(pass renderer, persistent, pass name)
 
 proc isPersistent*(session: SessionRaw): bool {.importc: "ulSessionIsPersistent".}
   ## Whether or not is persistent (backed to disk).
@@ -700,8 +707,10 @@ proc setPlatformLogger*(logger: ULLogger) {.importc: "ulPlatformSetLogger".}
 # ViewConfig
 #
 
-proc createViewConfig*(): ViewConfigStrong {.importc: "ulCreateViewConfig".}
+proc ulCreateViewConfig*(): ViewConfigStrong {.importc, defC.}
   ## Create view configuration with default values
+
+proc createViewConfig*(): ViewConfig = wrap ulCreateViewConfig()
   
 proc `accelerated=`*(config: ViewConfigRaw, isAccelerated: bool) {.importc: "ulViewConfigSetIsAccelerated".}
   ## When enabled, the View will be rendered to an offscreen GPU texture
@@ -737,10 +746,10 @@ proc `fontFamilyFixed=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc
 proc `fontFamilySerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilySerif".}
   ## Set default font-family to use for serif fonts (Default = Times New Roman).
   
-proc `fontFamilySansSerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.importc: "ulViewConfigSetFontFamilySansSerif".}
+proc `fontFamilySansSerif=`*(config: ViewConfigRaw, fontName: ULStringRaw) {.wrap: "ulViewConfigSetFontFamilySansSerif".}
   ## Set default font-family to use for sans-serif fonts (Default = Arial).
   
-proc `userAgent=`*(config: ViewConfigRaw, agentString: ULStringRaw) {.importc: "ulViewConfigSetUserAgent".}
+proc `userAgent=`*(config: ViewConfigRaw, agentString: ULStringRaw) {.wrap: "ulViewConfigSetUserAgent".}
   ## Set user agent string 
   
 
@@ -753,12 +762,50 @@ proc `$`*(str: ULString): string {.inline.} = $str.internal
 proc echoLog(x: LogLevel, y: ULStringRaw) {.cdecl.} = 
   echo x, ": ", $y
 
-template withJSCtx*(view: ViewRaw, ctxIdent, body: untyped) =
+template withJSCtx*(view: ViewRaw | View, ctxIdent, body: untyped) =
   ## Automatically locks the js context, runs body code, then locks context again
-  let ctxIdent {.inject.} = view.lockJSCtx()
+  let ctxIdent {.inject.} = 
+    (when view is ViewRaw: view else: view.internal).lockJSCtx()
   body
   view.unlockJSCtx()
+
+template withJSCtx*(view: ViewRaw | View, body: untyped) =
+  ## Automatically locks the js context, injects `ctx` variable to access
+  withJSCtx view, ctx:
+    body
 
 let echoLogger* = ULLogger(
   log_message: echoLog
 ) ## Simple logger that just echos to console
+
+
+proc echoConsoleCallback*(data: pointer, caller: ViewWeak, source: MessageSource, lvl: MessageLevel, 
+                message: ULStringWeak, lineNum, colNum: cuint, sourceID: ULStringWeak) {.cdecl.} =
+  ## This is used to echo messges from the executed Javascript, use with setAddConsoleMessageCallback_
+  ## to allow messages to be echoed
+  # TODO: Create a version that uses normal nim logging
+  echo message
+
+proc domReadyClosureCallback(data: pointer, caller: ViewWeak, id: culonglong, mainFrame: bool, url: ULStringWeak) {.cdecl.}=
+  # Get the function and enviroment pointers stored in data
+  # let info = cast[ClosureProc](data)[]
+  # echo repr data
+  # echo "===="
+  let info = cast[ptr tuple[fun: pointer, env: pointer]](data)[]
+  cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)
+  # echo repr info
+  # Call the function while passing the enviroment
+  # echo "called thing"
+  
+
+proc setDOMReadyCallback*(view: View, prc: pointer) =
+  ## Sets the event to be called when the DOM is ready.
+  ## While this doesn't have a data parameter to pass info, it allows you to use closure procs
+  # var data = ClosureProc(fun: prc.rawProc(), env: prc.rawEnv())
+  # GC_ref data # Data needs to stay alive for the entire program (this leaks 2 bytes of data doesn't it?)
+  # echo repr unsafeAddr prc
+  # echo "===="
+  view.setDOMReadyCallback(domReadyClosureCallback, prc)
+  # let info = cast[ptr tuple[fun: pointer, env: pointer]](unsafeAddr prc)[]
+  # cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)
+  # echo "here"

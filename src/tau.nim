@@ -1,7 +1,8 @@
 ##
 ## Tau is high/low level wrapper around `Ultralight <https://ultralig.ht/>`_
 ##
-## Most of the low level procs are prefixed with ul (minus getters and setters), while the high level procs have that dropped
+## The main difference between low/high level is that you need to manually destroy objects when using the low level api.
+## Procs for both levels are named similarly except the creation procs which have `ul` prefix for low level
 
 import tau/[
   appcore,
