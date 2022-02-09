@@ -1543,17 +1543,17 @@ macro makeWrapper*(prc: proc, name: string) =
   ## The wrapper (which will be named **name**) will have the same signature as JSObjectCallAsFunctionCallback_
   ##
   ## .. Note:: This still needs to be registered to the context using addToWindow_
-  runnableExamples "-r:off":
-    import std/db_sqlite
-    let db = open(":memory:", "", "", "")
-
-    proc runDB(query: string) =
-      db.exec(sql(query))
-
-    makeWrapper(prc, "runDBJS")
-
-    var ctx: JSContextRef # DONT DO THIS, THIS IS JUST AN EXAMPLE
-    ctx.addToWindow("runDB", runDBJS)
+  # runnableExamples "-r:off":
+    # import std/db_sqlite
+    # let db = open(":memory:", "", "", "")
+# 
+    # proc runDB(query: string) =
+      # db.exec(sql(query))
+# 
+    # makeWrapper(runDB, "runDBJS")
+# 
+    # var ctx: JSContextRef # DONT DO THIS, THIS IS JUST AN EXAMPLE
+    # ctx.addToWindow("runDB", runDBJS)
     
   let 
     impl = prc.getImpl
