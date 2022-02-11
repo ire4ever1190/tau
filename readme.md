@@ -2,7 +2,9 @@
 
 Under construction, please come back in a week or 2 
 
-[Docs available here](https://tempdocs.netlify.app/tau/stable/tau.html)
+[Docs available here](https://tempdocs.netlify.app/tau/stable/tau.html) (I recommend using the devel docs)
+
+Install via `nimble install https://github.com/ire4ever1190/tau`
 
 # Licensing
 While this repo is MIT licensed, [Ultralight](https://ultralig.ht/) is not. 

@@ -15,10 +15,10 @@ section "Nim":
 
     If you don't have that installed then install via choosenim with `choosenim 1.6.2`:cmd:
 
-    Now that you have nim installed, you just need to install τau either via `nimble install tau`:cmd: or adding to your `.nimble` file
+    Now that you have nim installed, you just need to install τau either via `nimble install https://github.com/ire4ever1190/tau`:cmd: or adding to your `.nimble` file
   """
   codeBlock:
-    requires "tau"
+    requires "http://github.com/ire4ever1190/tau"
 
 
 proc makeDlLink(infix: string): string =

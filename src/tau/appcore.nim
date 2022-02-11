@@ -1,13 +1,6 @@
 import common {.all.}
 
 type 
-  WindowFlags* {.size: sizeof(cint).}= enum
-    Borderless
-    Titled
-    Resizable
-    Maximizable
-    Hidden
-
   UpdateCallback* = proc (data: pointer) {.nimcall, cdecl.}
   CloseCallback*  = proc (data: pointer, window: WindowRaw) {.nimcall, cdecl.}
   
@@ -125,7 +118,7 @@ proc height*(monitor: MonitorRaw): cuint {.importc: "ulMonitorGetHeight".}
 # Window
 #
 
-proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, flags: cuint): WindowStrong {.importc: "ulCreateWindow", defC.}
+proc createWindow*(monitor: MonitorRaw, width, height: cuint, fullscreen: bool, flags: set[WindowFlag]): WindowStrong {.importc: "ulCreateWindow", defC.}
   ## Create a new Window.
   ##
   ## **monitor**: The monitor to create the Window on.
@@ -318,5 +311,5 @@ proc createOverlay*(window: Window, x, y: int = 0): Overlay =
 
 proc createWindow*(monitor: Monitor, width, height: uint, fullscreen = false, flags = {Titled}): Window {.inline.} =
   ## Creates a window that is on a monitor
-  wrap monitor.internal.createWindow(cuint width, cuint height, fullscreen, cast[cuint](flags))
+  wrap monitor.internal.createWindow(cuint width, cuint height, fullscreen, flags)
 

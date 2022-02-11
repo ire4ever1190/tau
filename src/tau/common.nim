@@ -32,8 +32,10 @@ const
 {.passL: "-lWebCore".}
 {.passL: "-lUltralight".}
 {.passL: "-lUltralightCore".}
-
 {.passC: "-I" & headerFolder.}
+
+{.experimental: "overloadableEnums".}
+{.experimental: "flexibleOptionalParams".}
 
 const ultraLightVersion = "1.3.0" # Supported version
 
@@ -41,12 +43,13 @@ template cAPI(module: string): string =
   ## Returns relative path to cAPI header for certain module
   headerFolder / module / "CAPI.h"
 
+{.pragma: sizeCuint, size: sizeof(cuint)}
 
 type 
   ULStruct* {.final, pure.} = object
   ULPtr* = ptr ULStruct
   
-  Cursor* = enum
+  Cursor* {.sizeCuint.} = enum
     Pointer = 0
     Cross
     Hand
@@ -92,7 +95,14 @@ type
     Grabbing
     Custom
 
-  MessageSource* = enum
+  WindowFlag* {.sizeCuint.}= enum
+    Borderless
+    Titled
+    Resizable
+    Maximizable
+    Hidden
+
+  MessageSource* {.sizeCuint.} = enum
     XML = 0
     JS
     Network
@@ -105,14 +115,14 @@ type
     ContentBlocker
     Other
 
-  MessageLevel* = enum
+  MessageLevel* {.sizeCuint.} = enum
     Log = 1
     Warning = 2
     Error = 3
     Debug = 4
     Info = 5
 
-  BitmapFormat* = enum
+  BitmapFormat* {.sizeCuint.} = enum
     ## **A8_UNORM**
     ##
     ## Alpha channel only, 8-bits per pixel.
@@ -131,7 +141,7 @@ type
     ##
     A8_UNORM
     A8_UNORM_SRGB
-  KeyEventType* = enum
+  KeyEventType* {.sizeCuint.} = enum
     ## * **KeyDown**: (Does not trigger accelerator commands in WebCore)
     ##
     ## .. Note: You should probably use RawKeyDown instead when a physical key
@@ -150,26 +160,26 @@ type
     RawKeyDown 
     Char
 
-  MouseEventType* = enum
+  MouseEventType* {.sizeCuint.} = enum
     MouseMoved
     MouseDown
     MouseUp
 
-  MouseButton* {.pure.} = enum 
+  MouseButton* {.sizeCuint.} = enum 
     None = 0
     Left
     Middle
     Right
 
-  ScrollEventType* = enum
+  ScrollEventType* {.sizeCuint.} = enum
     ByPixel
     ByPage
 
-  FaceWinding* = enum
+  FaceWinding* {.sizeCuint.} = enum
     Clockwise
     CounterClockwise
 
-  FontHinting* = enum
+  FontHinting* {.sizeCuint.} = enum
     ## **Smooth**
     ##
     ## Lighter hinting algorithm-- glyphs are slightly fuzzier but better
@@ -193,6 +203,7 @@ type
   WrapperObject*[T] = object
     ## Used to wrap a pointer for use in high level apis
     internal*: T
+
 
 proc `=destroy`[T](obj: var WrapperObject[T]) =
   ## Destroys the object stored in the wrapper
@@ -329,7 +340,6 @@ template setWrapInfo(header, dynlib: static[string]) =
 proc deSym(node: NimNode) =
   ## Removes all
 
-{.experimental: "flexibleOptionalParams".}
 
 macro wrap(cName: static[string], prc: untyped): untyped =
   ## Wraps a low level proc by making a proc which uses the `WrapperObject` pointer to call it.

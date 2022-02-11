@@ -1,8 +1,24 @@
 import common {.all.}
 import std/macros
 import std/times
+import std/strformat
+import std/parseutils
 
 {.experimental: "overloadableEnums".}
+
+##[
+  This contains wrappers for javascriptcore along with helpers for repititative tasks
+
+
+  Converting values
+  =================
+
+  Values can be converted between Nim and JS via `toJSValue` and `fromJSValue` procs. Most of these procs
+  have two different versions with the difference between the versions being that one allows you to handle `JSExceptions` yourself
+  while the other automatically raises a Nim exception
+  
+]##
+
 
 # TODO: Make high level api
 # something like this?
@@ -12,6 +28,15 @@ when false:
       obj: JSObjectRef
       ctx: JSContext
 
+
+# Pragmas for JS class annotations
+
+template jsHide* {.pragma.}
+  ## Hide the property from JS
+
+template jsReadOnly* {.pragma.}
+  ## Don't allow JS to set the object's value
+  
 type
   JSStruct* {.final, pure.} = object
   JSPtr* = ptr JSStruct
@@ -44,7 +69,8 @@ type
 
   JSException*       = ptr JSValueRef
     ## Used to get the exception from a callback
-  JSPropertyAttributes* = enum
+    
+  JSPropertyAttribute* {.size: sizeof(cuint).} = enum
     ## * **None**: Specifies that a property has no special attributes.
     ## * **ReadOnly**: Specifies that a property is read-only.
     ## * **DontEnum**: Specifies that a property should not be enumerated by JSPropertyEnumerators and JavaScript for...in loops.
@@ -54,13 +80,13 @@ type
     DontEnum   
     DontDelete 
     
-  JSClassAttribute* = enum
+  JSClassAttribute* {.size: sizeof(cuint).} = enum
     ## * **None**: Specifies that a class has no special attributes. 
     ## * **NoAutomaticPrototype**: Specifies that a class should not automatically generate a shared prototype for its instance objects. Use kJSClassAttributeNoAutomaticPrototype in combination with JSObjectSetPrototype to manage prototypes manually.
     None                
     NoAutomaticPrototype
 
-  JSType* = enum
+  JSType* {.size: sizeof(cuint).} = enum
     ## A Constant identifying the type of a JSValueRef_
     ##
     ## * **Undefined**: The unique undefined value.
@@ -78,7 +104,7 @@ type
     Object
     TypeSymbol
 
-  JSTypedArrayType* = enum
+  JSTypedArrayType* {.size: sizeof(cuint).} = enum
     ## A constant identifying the Typed Array type of a JSObjectRef.
     ## 
     ## * **Int8**: `Int8Array <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int8Array>`_
@@ -105,7 +131,22 @@ type
     None
 
   JSError* = object of CatchableError
-    ## Raised when there is an issue during execution
+    ## A JS error occurs when an exception is raised from the JS context
+    orig: JSException # Store the original exception
+
+  JSReferenceError* = object of JSError
+    ## Occurs when a variable that doesn't exist (or hasn't been initialized) in the current scope is referenced (`source <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ReferenceError>`_)
+
+  JSRangeError* = object of JSError
+    ## Occurs when a value is used when it is not in a range of allowed values (`source <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError>`_)
+
+  JSSyntaxError* = object of JSError
+    ## Occurs when you run syntactically incorrect code (`source <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SyntaxError>`_)
+
+  JSTypeError* = object of JSError
+    ## Occurs when a value is used in an incorrect way (Usually because it is the incorrect type) (`source <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypeError>`_)
+
+   
     
 type
   JSObjectInitializeCallback* = proc (ctx: JSContextRef, obj: JSObjectRef) {.nimcall, cdecl.}
@@ -281,34 +322,34 @@ type
     ## * **name**: A null-terminated UTF8 string containing the property's **name**:.
     ## * **getProperty**: A JSObjectGetPropertyCallback to invoke when getting the property's value.
     ## * **setProperty**: A JSObjectSetPropertyCallback to invoke when setting the property's value. May be `nil` if the ReadOnly attribute is set.
-    ## * **attributes**: A bitset of JSPropertyAttribute_ to give to the property.
+    ## * **attributes**: A set of attributes to give to the property.
     name*: cstring
     getProperty*: JSObjectGetPropertyCallback
     setProperty*: JSObjectSetPropertyCallback
-    attributes*: cint 
+    attributes*: set[JSPropertyAttribute] 
 
   JSStaticValueEx* {.bycopy, importc.} = object
-    ## Extension of JSStaticValue* for use with class version 1000
+    ## Extension of JSStaticValue* for use with class version `1000`
     name*: cstring
     getProperty*: JSObjectGetPropertyCallbackEx
     setProperty*: JSObjectSetPropertyCallbackEx
-    attributes*: cuint 
+    attributes*: set[JSPropertyAttribute] 
 
   JSStaticFunction* {.bycopy, importc.} = object
     ## This structure describes a statically declared function property.
     ##
     ## * **name**: A null-terminated UTF8 string containing the property's **name**:.
     ## * **callAsFunction**: A JSObjectCallAsFunctionCallback to invoke when the property is called as a function.
-    ## * **attributes**: A logically ORed set of JSPropertyAttributes to give to the property.
+    ## * **attributes**: A set of attributes to give to the property.
     name*: cstring
     callAsFunction: JSObjectCallAsFunctionCallback
-    attributes*: cuint
+    attributes*: set[JSPropertyAttribute]
 
   JSStaticFunctionEx* {.bycopy, importc.} = object
     ## Extension of JSStaticFunction* for use with class version 1000
     name*: cstring
     callAsFunction: JSObjectCallAsFunctionCallbackEx
-    attributes*: cuint
+    attributes*: set[JSPropertyAttribute]
 
 
   JSClassCallbacks* {.bycopy, union.} = object
@@ -349,11 +390,13 @@ type
     ## This structure contains properties and callbacks that define a type of object. All fields other than the version field are optional. Any pointer may be `nil`.
     ##
     ## The staticValues and staticFunctions arrays are the simplest and most efficient means for vending custom properties. Statically declared properties autmatically service requests like getProperty, setProperty, and getPropertyNames. Property access callbacks are required only to implement unusual properties, like array indexes, whose names are not known at compile-time.
-    ## Standard JavaScript practice calls for storing function objects in prototypes, so they can be shared. The default JSClass created by JSClassCreate follows this idiom, instantiating objects with a shared, automatically generating prototype containing the class's function objects. The kJSClassAttributeNoAutomaticPrototype attribute specifies that a JSClass should not automatically generate such a prototype. The resulting JSClass instantiates objects with the default object prototype, and gives each instance object its own copy of the class's function objects.
+    ##
+    ## Standard JavaScript practice calls for storing function objects in prototypes, so they can be shared. The default JSClass created by JSClassCreate follows this idiom, instantiating objects with a shared, automatically generating prototype containing the class's function objects. The `NoAutomaticPrototype` attribute specifies that a JSClass should not automatically generate such a prototype. The resulting JSClass instantiates objects with the default object prototype, and gives each instance object its own copy of the class's function objects.
+    ##
     ## A `nil` callback specifies that the default object callback should substitute, except in the case of hasProperty, where it specifies that getProperty should substitute.
     ##
-    ## * **version**: The version number of this structure. The current version is 0.
-    ## * **attributes**: A bitset of JSClassAttributes_ to give to the class.
+    ## * **version**: The version number of this structure. Default is `0` but you should use `1000` for callbacks with extended class info.
+    ## * **attributes**: A set of JSClassAttributes_ to give to the class.
     ## * **className**: A null-terminated UTF8 string containing the class's name.
     ## * **parentClass**: A JSClass to set as the class's parent class. Pass `nil` use the default object class.
     ## * **staticValues**: A JSStaticValue_ array containing the class's statically declared value properties. Pass `nil` to specify no statically declared value properties. The array must be terminated by a JSStaticValue_ whose name field is `nil`.
@@ -370,10 +413,10 @@ type
     ## * **callAsConstructor**: The callback invoked when an object is used as a constructor in a 'new' expression.
     ## * **convertToType**: The callback invoked when converting an object to a particular JavaScript type.
     version*: cint
-    attributes: cuint
+    attributes: set[JSClassAttribute]
     className*: cstring
     parentClass*: JSClassRef
-    callbacks*: JSClassCallbacks
+    callbacks*: JSClassCallbacksUnion
     privateData*: pointer
 
   
@@ -605,7 +648,7 @@ proc makeConstructor*(ctx: JSContextRef, jsClass: JSClassRef, constrc: JSObjectC
   ## * **constrc** A JSObjectCallAsConstructorCallback to invoke when your constructor is used in a 'new' expression. Pass NULL to use the default object constructor.
   ## * **return** A JSObjectRef_ that is a constructor. The object's prototype will be the default object prototype.
 
-proc makeArray*(ctx: JSContextRef, argumentCount: csize_t, arguments: UncheckedArray[JSValueRef], exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeArray".}
+proc makeArray*(ctx: JSContextRef, argumentCount: csize_t, arguments: ptr JSValueRef, exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeArray".}
   ##  Creates a JavaScript Array object.
   ##  
   ## * **ctx**: The execution context to use.
@@ -618,7 +661,7 @@ proc makeArray*(ctx: JSContextRef, argumentCount: csize_t, arguments: UncheckedA
   ##  is supplied, this function returns an array with one element.
   ##  
 
-proc makeDate*(ctx: JSContextRef, argumentCount: csize_t, arguments: UncheckedArray[JSValueRef], exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeDate".}
+proc makeDate*(ctx: JSContextRef, argumentCount: csize_t, arguments: ptr JSValueRef, exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeDate".}
   ##  Creates a JavaScript Date object, as if by invoking the built-in Date constructor.
   ##  
   ## * **ctx**: The execution context to use.
@@ -628,7 +671,7 @@ proc makeDate*(ctx: JSContextRef, argumentCount: csize_t, arguments: UncheckedAr
   ## * **returns**: A JSObjectRef_ that is a Date.
   ##  
 
-proc makeError*(ctx: JSContextRef, argumentCount: csize_t, argument: UncheckedArray[JSValueRef], exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeError".}
+proc makeError*(ctx: JSContextRef, argumentCount: csize_t, argument: ptr JSValueRef, exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeError".}
   ##  Creates a JavaScript Error object, as if by invoking the built-in Error constructor.
   ##  
   ## * **ctx**: The execution context to use.
@@ -638,7 +681,7 @@ proc makeError*(ctx: JSContextRef, argumentCount: csize_t, argument: UncheckedAr
   ## * **returns**: A JSObjectRef_ that is a Error.
   ##  
 
-proc makeRegExp*(ctx: JSContextRef, argumentCount: csize_t, arguments: UncheckedArray[JSValueRef], exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeRegExp".}
+proc makeRegExp*(ctx: JSContextRef, argumentCount: csize_t, arguments: ptr JSValueRef, exception: ptr JSValueRef): JSObjectRef {.importc: "JSObjectMakeRegExp".}
   ##  Creates a JavaScript RegExp object, as if by invoking the built-in RegExp constructor.
   ##  
   ## * **ctx**: The execution context to use.
@@ -798,14 +841,14 @@ proc setPropertyAtIndex*(ctx: JSContextRef, obj: JSObjectRef, propertyIndex: cui
   ## Calling this is equivalent to calling setProperty_ with a string containing propertyIndex, but this provides optimized access to numeric properties.
   ## 
 
-proc private*(obj: JSObjectRef): pointer {.importc: "JSObjectGetPrivate".}
+proc getPrivate*(obj: JSObjectRef): pointer {.importc: "JSObjectGetPrivate".}
   ##  Gets an object's private data.
   ## 
   ## * **obj**: A JSObjectRef_ whose private data you want to get.
   ## * **returns**: A pointer that is the object's private data, if the object has private data, otherwise `nil`.
   ## 
 
-proc `private=`*(obj: JSObjectRef, data: pointer): bool {.importc: "JSObjectSetPrivate".}
+proc setPrivate*(obj: JSObjectRef, data: pointer): bool {.importc: "JSObjectSetPrivate".}
   ##  Sets a pointer to private data on an object.
   ## 
   ## * **obj**: The JSObjectRef_ whose private data you want to set.
@@ -1361,23 +1404,14 @@ proc unprotect*(ctx: JSContextRef, value: JSValueRef): void {.importc: "JSValueU
 
 proc `$`*(str: JSStringRef): string =
   ## Converts a JSStringRef_ to a nim string
-  let length = str.len
-  var buf = cast[ptr UncheckedArray[char]](
-    when usingThreads: createShared(char, length)
-    else: create(char, length)
-  )
+  let length = str.len - 1
+  var buf = newSeq[char](length)
 
   let bufLen = str.getCString(addr buf[0], length) - 1 # -1 to ignore null terminator
-  
   result = newString(bufLen)
   for i in 0..<bufLen:
     result[i] = buf[i]
     
-  when usingThreads:
-    freeShared(buf)
-  else:
-    dealloc(buf)
-
 proc jsString*(str: cstring): JSStringRef {.inline.} = 
   ## Alias to `createJSString <#createJSString%2Ccstring>`
   createJSString(str)
@@ -1386,11 +1420,11 @@ proc jsString*(str: cstring): JSStringRef {.inline.} =
 
 proc toJSValue*(ctx: JSContextRef, val: string): JSValueRef
 
-proc raiseJSException(ctx: JSContextRef, msg: string, exception: JSException) =
+proc setJSException*(ctx: JSContextRef, msg: string, exception: JSException) =
   ## Sets the exception pointer so that an exception is raised in the javascript context.
   ## Meant to be used when you have an exception pointer to set
   var jsMsg = ctx.toJSValue(msg)
-  let err = ctx.makeError(1, cast[ptr UncheckedArray[JSValueRef]](addr jsMsg)[], nil)
+  let err = ctx.makeError(1, addr jsMsg, nil)
   exception[] = cast[JSValueRef](err)
 
 proc addToWindow*(ctx: JSContextRef, name: string, val: JSValueRef) =
@@ -1409,14 +1443,37 @@ proc addToWindow*(ctx: JSContextRef, name: string, prc: JSObjectCallAsFunctionCa
 
 proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T
 
-proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
-  ## Throws a Nim exception from a `JSException` that has been returned from a proc
-  assert exception.JSPtr != nil, "No exception"
-  raise (ref JSError)(msg: ctx.fromJSValue(exception, string))
-
 proc isNil*(val: JSValueRef | JSObjectRef): bool {.inline.} =
   result = val.JSPtr == nil
 
+proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
+  ## Throws a Nim exception from a `JSException` that has been returned from a proc
+  assert not exception.isNil, "No exception has occured"
+  # Stop showing off with "clever" code, make this less convoluted
+  var
+    errorType: string
+    index = 0
+  let errMsg = ctx.fromJSValue(exception, string)
+  index += errMsg.parseUntil(errorType, ':') + 2
+
+  var msg = newString errMsg.len - index
+  
+  discard errMsg.parseUntil(msg, '\x00', index)
+  template doRaise(kind: untyped) = raise (ref kind)(msg: msg, orig: addr exception)  
+
+  # Make the error be more refined
+  case errorType
+  of "ReferenceError":
+    doRaise(JSReferenceError)
+  of "RangeError":
+    doRaise(JSRangeError)
+  of "SyntaxError":
+    doRaise(JSSyntaxError)
+  of "TypeError":
+    doRaise(JSTypeError)
+  else:
+    raise (ref JSError)(msg: errMsg, orig: addr exception)
+    
 proc getProperty*(ctx: JSContextRef, obj: JSObjectRef, propName: string): JSValueRef =
   ## See `getProperty <#getProperty%2CJSContextRef%2CJSObjectRef%2CJSStringRef%2Cptr.JSValueRef>`_.
   var exception: JSValueRef
@@ -1431,7 +1488,37 @@ proc getProperty*(ctx: JSContextRef, obj: JSObjectRef, propName: string): JSValu
 # High level converters for conversion of Nim types to JSValueRefs
 #
 
-
+macro makeRaiser(prc: untyped) =
+  ## Makes a version of a proc with the exception parameter removed and auto handles exceptions
+  var
+    exceptionIdent = ident"exception"
+    newParams: seq[NimNode]
+    inCall = nnkCall.newTree(prc.name) # Call to function that doesn't handle exception
+  for i, param in prc.params:
+    if i > 0:
+      if not param[0].eqIdent("exception"):
+        newParams &= param
+      inCall &= ident $param[0]
+    else:
+      newParams &= param
+    
+  let body = quote do:
+      var `exceptionIdent`: JSValueRef
+      result = `inCall`
+      if not `exceptionIdent`.isNil:
+        ctx.throwNim `exceptionIdent`
+        
+  result = newStmtList(
+    prc,
+    newProc(
+      prc[0],
+      newParams,
+      body
+    )  
+  )
+  
+  result[1][2] = prc[2] # Copy generic parameters
+  
 
 proc toJSValue*[T: SomeFloat | SomeInteger](ctx: JSContextRef, val: T): JSValueRef {.inline.} = 
   ## Converts a number into a JS value
@@ -1441,7 +1528,8 @@ proc toJSValue*(ctx: JSContextRef, val: string): JSValueRef =
   let str = jsString(val.cstring)
   ctx.makeString(str) # We don't need to free str since the context will free it
 
-proc toJSValue*[T: object](ctx: JSContextRef, val: T, jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef = 
+proc toJSValue*[T: object](ctx: JSContextRef, val: T, exception: JSValueRef, 
+                           jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef {.makeRaiser.} = 
   ## Converts an object into a JS object
   ## 
   ## * **jsClass**: The class to assign to the object, is the default class by default
@@ -1449,125 +1537,404 @@ proc toJSValue*[T: object](ctx: JSContextRef, val: T, jsClass: JSClassRef = nil,
   let tmp = ctx.makeObject(jsClass, data)
   for name, value in val.fieldPairs():
     let key = createJSString(name)
-    ctx.setProperty(tmp, key, ctx.toJSValue(value), 0, nil)
+    ctx.setProperty(tmp, key, ctx.toJSValue(value), 0, addr exception)
     release key
+    if not exception.isNil:
+      return
   result = cast[JSValueRef](tmp)
 
-proc toJSValue*[T: ref object](ctx: JSContextRef, val: T, jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef =
-  ctx.toJSValue(val[], jsClass, data)
+proc toJSValue*[T: ref object](ctx: JSContextRef, val: T, exception: JSValueRef, 
+                               jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef {.makeRaiser.} =
+  ctx.toJSValue(val[], exception, jsClass, data)
 
 proc toJSValue*[T: JSValueRef](ctx: JSContextRef, val: T): JSValueRef {.inline.} = val
 proc toJSValue*[T: JSObjectRef](ctx: JSContextRef, val: T): JSValueRef {.inline.} = cast[JSValueRef](val)
 
 proc toJSValue*(ctx: JSContextRef, val: bool): JSValueRef {.inline.} =
-  ## Converts a boolean into a JSValue
+  ## Converts a `bool` into a JSValue
   ctx.makeBool(val)
 
 
-proc toJSValue*[T](ctx: JSContextRef, val: openArray[T]): JSValueRef =
+proc toJSValue*[T](ctx: JSContextRef, val: openArray[T], exception: JSValueRef): JSValueRef {.makeRaiser.} =
   ## Converts items in a sequence into a JS array
-  let items = cast[ptr UncheckedArray[JSValueRef]](
-    when usingThreads: createShared(JSValueRef, val.len)
-    else: create(JSValueRef, val.len)
-  )
-
+  var items = newSeq[JSValueRef](val.len)
   for i, item in val:
     items[i] = ctx.toJSValue(item)
 
-  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, items[], nil))
+  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, addr items[0], addr exception))
   
-  when usingThreads:
-    freeShared items
-  else:
-    dealloc items
 
-proc toJSValue*(ctx: JSContextRef, val: DateTime): JSValueRef =
+proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSValueRef): JSValueRef {.makeRaiser.} =
   ## Converts a Nim `DateTime` into a JS `DateTime`
   var dateStr = ctx.toJSValue($val)
-  result = cast[JSValueRef](ctx.makeDate(
-    1, cast[ptr UncheckedArray[JSValueRef]](addr dateStr)[], nil
-  ))
+  result = cast[JSValueRef](ctx.makeDate(1, addr dateStr, addr exception))
+
+
 
 #
 # Converters from JS values
 #
+# Should danger turn off all exception checks?
 
-proc fromJSValue*[T: SomeInteger](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T =
-  result = kind(ctx.toNumber(val, nil))
 
-proc fromJSValue*[T: object](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T =
-  var exception: JSValueRef
+proc fromJSValue*[T: SomeInteger](ctx: JSContextRef, val: JSValueRef, 
+                                  kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+  ## Converts a JS number to a Nim number
+  result = kind(ctx.toNumber(val, addr exception))
+
+proc fromJSValue*[T: object](ctx: JSContextRef, val: JSValueRef, 
+                             kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+  ## Makes an `object` from a JSValue_
   let obj = ctx.toObject(val, addr exception)
   if not obj.isNil:
     for name, value in result.fieldPairs():
       let cName = createJSString(name)
       let jsVal = ctx.getProperty(obj, cName, addr exception)
       if jsVal.isNil:
-        ctx.throwNim exception
+        return
         
       value = ctx.fromJSValue(jsVal, typeof(value))
       release cName
-  else:
-    ctx.throwNim exception
-
-proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T =
-  result = $ctx.toString(val, nil)
+      
+proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef,
+                             kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+  ## Makes a `string` from a JSValue_
+  result = $ctx.toString(val, addr exception)
 
 proc fromJSValue*(ctx: JSContextRef, val: JSValueRef, kind: typedesc[bool]): bool =
+  ## Makes a `bool` from a JSValue_
   result = ctx.toBool(val)
 
 template fromArrayLikeImpl(length: int) =
-  ## Excepts `exception` and `obj` to be declared in calling site
-  if not obj.isNil:
-    for i in 0..<length:
-      let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, addr exception)
-      if jsVal.isNil:
-        ctx.throwNim exception
-      result[i] = ctx.fromJSValue(jsVal, T)
+  ## Expects `exception` and `obj` to be declared in calling site
+  for i in 0..<length:
+    let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, addr exception)
+    if not exception.isNil: return
+    result[i] = ctx.fromJSValue(jsVal, T, exception)
+    if not exception.isNil: return
 
-proc fromJSValue*[K: static[int], T](ctx: JSContextRef, val: JSValueRef, kind: typedesc[array[K, T]]): array[K, T] =
-  var exception: JSValueRef
+proc fromJSValue*[K: static[int], T](ctx: JSContextRef, val: JSValueRef, 
+                                     kind: typedesc[array[K, T]], exception: JSValueRef): array[K, T] {.makeRaiser.} =
+  ## Makes an `array[T]`` from a JSValue_
   let obj = ctx.toObject(val, addr exception)
+  if not exception.isNil: return
   fromArrayLikeImpl(K)
 
-proc fromJSValue*[T](ctx: JSContextRef, val: JSValueRef, kind: typedesc[seq[T]]): seq[T] =
-  var exception: JSValueRef
+proc fromJSValue*[T](ctx: JSContextRef, val: JSValueRef, 
+                     kind: typedesc[seq[T]], exception: JSValueRef): seq[T] {.makeRaiser.} =
+  ## Makes a `seq[T]` from a JSValue_
   let obj = ctx.toObject(val, addr exception)
+  if not exception.isNil: return
   
-  let length = ctx.fromJSValue(ctx.getProperty(obj, "length"), int)
+  let length = ctx.fromJSValue(ctx.getProperty(obj, "length"), int, exception)
+  if not exception.isNil: return
+  
   result = newSeq[T](length)
   fromArrayLikeImpl(length)
 
-macro makeWrapper*(prc: proc, name: string) =
+# TODO: Move to utils file
+macro findProc*(choices: typed, signature: varargs[typed]): untyped =
+  ## Used for narrowing a proc down when it has overloads
+  runnableExamples:
+    proc foo(a: string) = discard
+    proc foo(a: int) = discard
+    # We want to pass foo(int) to JS
+    makeWrapper("fooJS", findProc(foo, int))
+
+  if choices.kind == nnkSym:
+    # Just return sym if it has no overloads
+    return choices
+    
+  choices.expectKind(nnkClosedSymChoice)
+  result = newEmptyNode()
+  
+  for choice in choices:
+    var 
+      index = 0
+      found = true
+    # Go through each parameter and see if the types line up with signature
+    block newChoice:
+      let impl = choice.getImpl()
+      for param in impl[3][1..^1]:
+        let kind = param[^2]
+        for name in param[0 ..< ^2]:
+          if not kind.eqIdent(signature[index]):
+            found = false
+            break newChoice
+          inc index
+          
+    if found:
+      return choice
+  "Cannot find any overload that matches signature".error(choices)
+
+proc makeJSClass[T: ref object](x: typedesc[T]): JSClassRef =
+  ## .. Important:: You need to call makeJSClassWrapper_ first, this will give a compile time error if you don't
+  {.error: "Call makeJSClass first".}
+
+type
+  ClassParameter = object
+    name, kind: NimNode
+    attributes: set[JSPropertyAttribute]
+    getter, setter: NimNode
+
+proc makeSignature(params: openArray[(string, string)], returnType = ""): seq[NimNode] =
+  ## Makes a sequence of NimNodes that can be passed to newProc 
+  if returnType != "":
+    result &= ident returnType
+
+  for (name, kind) in params:
+    result &= nnkIdentDefs.newTree(
+      ident name,
+      parseExpr(kind), # Makes handling types like UncheckedArray[T] easier
+      newEmptyNode()
+    )
+
+macro makeJSClassWrapper*(typ: typedesc[ref object]) =
+  ## Makes a wrapper around a ref object so that it can be shared directly between Nim/JS code i.e. changing
+  ## its values on the JS side affects the Nim side.
+  ##
+  ## It is recommended to use this for big objects since this is quicker than converting the entire object
+  # TODO: Check if it is actually quicker
+  # TODO: Optimise operations
+  # TODO: Support oop (i.e. object of Something), maybe support this via JSClass inheritance also?
+  let 
+    impl = typ.getImpl()
+    name = $impl[0]
+  var body = impl[2]
+
+  case body[0].kind
+  of nnkSym:
+    body = body[0].getImpl()[2]
+  else: discard
+
+  var params: seq[ClassParameter]    
+
+  # TODO: Make this for loop into a util, I do it often enough
+  # Extract all the types out of the type defintion (Making sure to following if its an alias)
+  # Property attributes are found by seeing what pragmas are attached to the property
+  for identDef in body[2]:
+    let kind = identDef[^2]
+    for param in identDef[0 ..< ^2]:
+      block paramSect:
+        var classParam = ClassParameter(attributes: {DontDelete}, kind: kind, setter: newNilLit())
+        if param.kind == nnkPragmaExpr:
+          classParam.name = param[0]
+          # Add options that relate to certain pragmas
+          for prag in param[1]:
+            # Make faster method? Use caseStmt macro from dimscmd maybe?
+            # Don't believe the properties will expand much so this should be fine
+            if prag.eqIdent("jsHide"):
+              # Ignore the property
+              break paramSect
+            elif prag.eqIdent("jsReadyOnly"):
+              classParam.attributes.incl ReadOnly
+            elif prag.eqIdent("jsDontEnum"):
+              classParam.attributes.incl DontEnum
+        else:
+          classParam.name = param
+        params &= classParam
+
+
+
+  let pragmas = nnkPragma.newTree(ident "cdecl")
+
+  result = newStmtList() 
+  # Create getters/setters
+  var staticValues = nnkBracket.newTree()
+  for parameter in params.mitems():
+    # Idents need to be made every loop or I get capture errors
+    # TODO: See if genasts will fix/help this
+    let
+      ctxIdent = ident "ctx"
+      objIdent = ident "obj"
+      exceptionIdent = ident "exception"
+      valueIdent = ident "value"
+      
+      getterSig = makeSignature({
+        $ctxIdent: "JSContextRef",
+        $objIdent: "JSObjectRef",
+        "propName": "JSStringRef",
+        $exceptionIdent: "JSException"
+      }, "JSValueRef")
+
+      setterSig = makeSignature({
+        $ctxIdent: "JSContextRef",
+        $objIdent: "JSObjectRef",
+        "propName": "JSStringRef",
+        $valueIdent: "JSValueRef",
+        $exceptionIdent: "JSException"
+      }, "bool")
+      
+    let 
+      getterName = genSym(nskProc, "get_" & $parameter.name)
+      paramName = parameter.name
+    # Create getter function
+    let getterBody = quote do:
+      var obje = cast[`typ`](`objIdent`.getPrivate())
+      when compiles(ctx.toJSValue(obje.`paramName`, `exceptionIdent`[])):
+        return ctx.toJSValue(obje.`paramName`, `exceptionIdent`[])
+      else:
+        return ctx.toJSValue(obje.`paramName`)
+        
+    result &= newProc(
+      getterName,
+      getterSig,
+      getterBody,
+      pragmas = pragmas
+    )
+    
+    parameter.getter = getterName
+    # Create setter if it is not ready only
+    if ReadOnly notin parameter.attributes:
+      let 
+        setterName = genSym(nskProc, "set_" & $parameter.name)
+        paramType = parameter.kind
+        
+      let setterBody = quote do:
+        var obj = cast[`typ`](getPrivate `objIdent`)
+        template typ(): untyped = typeof(obj.`paramName`)
+        when compiles(ctx.fromJSValue(`valueIdent`, typ(), `exceptionIdent`)):
+          obj.`paramName` = ctx.fromJSValue(`valueIdent`, typ(), `exceptionIdent`)
+        else:
+          obj.`paramName` = ctx.fromJSValue(`valueIdent`, typ())
+        
+        result = true
+
+      result &= newProc(
+        setterName,
+        setterSig,
+        setterBody,
+        pragmas = pragmas
+      )
+      parameter.setter = setterName
+      
+    staticValues &= nnkObjConstr.newTree(
+      ident "JSStaticValue",
+      newColonExpr(ident "name", newLit $parameter.name),
+      newColonExpr(ident "getProperty", parameter.getter),
+      newColonExpr(ident "setProperty", parameter.setter),
+      newColonExpr(ident "attributes", newLit parameter.attributes)
+    )
+    break
+  # Create proc to make a class
+  # Reason a proc is used is so that later converter procs can easily know if
+  # a class version of an object exists
+  result.add quote do:
+    proc makeJSClass(obj: typedesc[`typ`]): JSClassRef =
+      var class {.global.}: JSClassRef
+      once:
+        var classDef = JSClassDefinitionEmpty
+        let staticValues {.global.} = `staticValues`
+        classDef.className = `name`
+        var staticValuesPtr = addr staticValues[0]
+        {.emit: [classDef, ".staticValues = ", staticValuesPtr, ";"].}
+        # classDef.callbacks.callbacks.staticValues = addr staticValues[0]
+        class = classCreate(addr classDef)
+        
+      result = class
+      
+    
+
+macro makeWrapper*(name: static[string], prc: typed, ignoreArgs: static[bool] = false) =
   ## Makes a wrapper around a native Nim proc so that it can be called from JS.
   ## The wrapper (which will be named **name**) will have the same signature as JSObjectCallAsFunctionCallback_
   ##
+  ## * **ignoreArgs**: Whether to ignore the numbers of args passed in
+  ##
   ## .. Note:: This still needs to be registered to the context using addToWindow_
-  # runnableExamples "-r:off":
-    # import std/db_sqlite
-    # let db = open(":memory:", "", "", "")
-# 
-    # proc runDB(query: string) =
-      # db.exec(sql(query))
-# 
-    # makeWrapper(runDB, "runDBJS")
-# 
-    # var ctx: JSContextRef # DONT DO THIS, THIS IS JUST AN EXAMPLE
-    # ctx.addToWindow("runDB", runDBJS)
+  # TODO: Allow for do syntax
+  runnableExamples "-r:off":
+    import std/db_sqlite
+    let db = open(":memory:", "", "", "")
+
+    proc runDB(query: string) =
+      db.exec(sql(query))
+
+    makeWrapper("runDBJS", runDB)
+
+    var ctx: JSContextRef # DONT DO THIS, THIS IS JUST AN EXAMPLE
+    ctx.addToWindow("runDB", runDBJS)
+
+  if prc.kind == nnkClosedSymChoice:
+    # Maybe print overloads also?
+    "Proc passed has overloads, use `findProc` to narrow down to correct proc".error(prc)
     
+  let impl = if prc.kind == nnkSym: prc.getImpl else: prc
   let 
-    impl = prc.getImpl
     sym = impl[0]  
     paramsDecl = impl[3]
 
   var
     returnType = paramsDecl[0]
     params: seq[NimNode]
+    call = nnkCall.newTree(sym)
 
+  let
+    ctxIdent = ident "ctx"
+    argsIdent = ident "arguments"
+    argCIdent = ident "argC"
+    exceptionIdent = ident "exception" # Exception that is passed in has a parameter from javascript
+    expectedIdent = ident "expected"
+    
+  var paramConv = newStmtList()
+  var index = 0
+  # Add a conversion of each parameter into a Nim type into the body
+  # This converted variable will then be passed to the actual proc
   for param in paramsDecl[1..^1]:
-    echo param.treeRepr
+    let
+      kind = ident $param[^2] # Type needs to be desymed so that it is passed as typedesc[]
+      defaultValue = param[^1]
+    if defaultValue.kind != nnkEmpty:
+      # TODO: Support default values
+      "Default values not supported".error(defaultValue)
+      
     for name in param[0 ..< ^2]:
-      echo name.treeRepr
+      let 
+        deSymedName = ident $name
+      call &= deSymedName
+      paramConv.add quote do:
+        when compiles(`ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)):
+          let `deSymedName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)
+          if not `exceptionIdent`.isNil:
+            # `JSExceptionIdent`[] = `exceptionIdent`
+            return
+        else:
+          let `deSymedName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`)
+          
+      inc index
+  if returnType.kind != nnkEmpty:
+    # Convert back to JS type is needed
+    call = quote do:
+      return `ctxIdent`.toJSValue(`call`)  
+
+  let body = quote do:
+    when not bool(`ignoreArgs`):
+      if `argCIdent` != `index`: # Index will be same as count
+        const `expectedIdent` = `index`
+        ctx.setJSException(fmt"Invalid arg count, excepted {expected} but got {argC}", `exceptionIdent`)
+    `paramConv`
+    `call`
+      
+  # Signature of the proc that sent to the JS ctx
+  let jsProcSig = makeSignature({
+    $ctxIdent: "JSContextRef",
+    "fun": "JSObjectRef",
+    "this": "JSObjectRef",
+    $argCIdent: "csize_t",
+    $argsIdent: "UncheckedArray[JSValueRef]",
+    $exceptionIdent: "JSException"
+  }, returnType = "JSValueRef")
+
+  result = newProc(
+    ident name,
+    jsProcSig,
+    body,
+    pragmas = nnkPragma.newTree(
+      ident "cdecl"
+    )
+  )
+  
+
 
 macro makeBinds*(procs: openArray[proc]) =
   ## Makes binding functions which can be added via addToWindow_.

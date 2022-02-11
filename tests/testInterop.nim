@@ -3,24 +3,7 @@
 import std/unittest
 import tau
 import utils
-import os
-
-#
-# Create headless instance
-#
-
-let config = createConfig()
-  
-enablePlatformFontLoader()
-enablePlatformFileSystem(currentSourcePath.parentDir() / "assets")
-enableDefaultLogger("./ultralight.log")
-
-let
-  renderer = createRenderer(config)
-  session = createSession(renderer, false, "testInterop")
-  viewConfig = createViewConfig()
-  view = renderer.createView(500, 500, viewConfig, session)
-
+include headlessApp
 
 type
   Person = object
@@ -145,4 +128,85 @@ withJSCtx view:
     ctx.addToWindow("foo", foo)
     check ctx.evalScript("foo()", int) == 2509
 
-  # suite ""
+  suite "Exceptions":
+    test "ReferenceError":
+      expect JSReferenceError:
+        discard ctx.evalScript("person.walk()")
+
+    test "RangeError":
+      expect JSRangeError:
+        discard ctx.evalScript("let a = 10; a.toFixed(99999999999999)")
+
+    test "SyntaxError":
+      expect JSSyntaxError:
+        discard ctx.evalScript("""{"name": ""}""")
+
+    test "TypeError":
+      expect JSTypeError:
+        discard ctx.evalScript("'hello'.speak()")
+
+  suite "Adding a ref object via JSClass":
+    type
+      RefPerson = ref Person
+
+      ComplexType = ref object
+        a, b {.jsHide.}: bool
+        name {.jsReadOnly.}: string
+        section: string
+    
+    
+    makeJSClassWrapper(RefPerson)
+
+    test "Sending object across":
+      let person = RefPerson(
+        name: "Jake"
+      )
+      let ob = ctx.makeObject(RefPerson.makeJSClass(), cast[pointer](person))
+      ctx.addToWindow("john", cast[JSValueRef](ob))
+      check ctx.evalScript("john.name", string) == "Jake"
+      person.name = "Not Jake"
+      check ctx.evalScript("john.name", string) == "Not Jake"
+    # makeJSClass(ComplexType)
+    
+  suite "Adding a function with wrapper macro":
+    test "No params, no return":
+      var ret: int # Still need to make sure it is called
+
+      proc simple() =
+        ret = 90
+
+      makeWrapper("simpleJS", simple)
+
+      ctx.addToWindow("simple", simpleJS)
+      discard ctx.evalScript("simple()")
+      check ret == 90
+
+    test "Params":
+      var ret: int
+
+      proc simple(x: int) =
+        ret = x
+
+      makeWrapper("simpleJS", simple)
+      ctx.addToWindow("simple", simpleJS)
+
+    test "Return value":
+      proc addNums(x, y: int): int =
+        result = x + y
+
+      makeWrapper("addJS", addNums)
+      ctx.addToWindow("add", addJS)
+      check ctx.evalScript("add(9, 14)", int) == 23
+
+    test "Invalid params":
+      proc addNums(x, y: int): int =
+        result = x + y
+      makeWrapper("addJS", addNums)
+      ctx.addToWindow("add", addJS)
+
+      expect JSError:
+        discard ctx.evalScript("add(9)", int)
+      echo ctx.evalScript("TypeError", string)
+      # expect JSTypeError:
+        # discard ctx.evalScript("add('hello', 9)", int)
+    

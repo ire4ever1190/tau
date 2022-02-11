@@ -1,5 +1,4 @@
 import common {.all.}
-import ptr_math
 import javascriptcore
 
 
@@ -138,12 +137,13 @@ proc ulStringRaw*(str: cstring, len: csize_t): ULStringStrong {.wrap: "ulCreateS
 proc copy*(str: ULStringRaw): ULStringStrong {.wrap: "ulCreateStringFromCopy".}
   ## Create string from copy of existing string.
   ## This is useful in making your own copy of a weak string returned from a proc  
-  
-proc `copy=`*(dest: var ULStringStrong, src: ULStringRaw) =
-  if dest.pointer != src.pointer:
-    `=destroy`(dest)
-    wasMoved(dest)
-    dest = copy src
+
+when false:
+  proc `=copy`(dest: var ULStringStrong, src: ULStringRaw) =
+    if dest.pointer != src.pointer:
+      `=destroy`(dest)
+      wasMoved(dest)
+      dest = copy src
     
 proc len*(str: ULStringRaw): cint {.wrap: "ulStringGetLength".}
   ## Get length in UTF-16 characters.
@@ -161,15 +161,20 @@ proc assign*(str: ULStringRaw, newStr: ULStringRaw) {.importc: "ulStringAssignSt
 proc assign*(str: ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCString".}
   ## Replaces the contents of **str** with the contents of a `cstring`.
 
+
+type
+  UltralightString = object # ULString is equivilant to this
+    # TODO, Forgo helper procs and use this directly? 
+    # Just need to know how to make it a weak/strong pointer
+    data: cstring
+    length: csize_t
+
 proc copyTo*(str: ULStringRaw, newStr: var string) =
   ## Copies `str` to `newStr`
-  newStr = newString str.len
-  let data = cast[ptr UncheckedArray[uint8]](str.data)
-  # let test = cast[WideCString](str.data)
-  # echo test
-  # newStr = $test
-  for i in 0..<str.len:
-    newStr[i] = chr(data[][i] and 0x00FF)
+  let ulStr = cast[ptr UltralightString](str)
+  newStr = newString ulStr.length
+  for i in 0..<ulStr.length:
+    newStr[i] = ulStr.data[i]
 
 
 #
