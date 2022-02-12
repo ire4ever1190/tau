@@ -159,14 +159,13 @@ withJSCtx view:
 
     test "Sending object across":
       let person = RefPerson(
-        name: "Jake"
+        name: "John"
       )
       let ob = ctx.makeObject(RefPerson.makeJSClass(), cast[pointer](person))
       ctx.addToWindow("john", cast[JSValueRef](ob))
-      check ctx.evalScript("john.name", string) == "Jake"
-      person.name = "Not Jake"
-      check ctx.evalScript("john.name", string) == "Not Jake"
-    # makeJSClass(ComplexType)
+      check ctx.evalScript("john.name", string) == "John"
+      person.name = "Not John"
+      check ctx.evalScript("john.name", string) == "Not John"
     
   suite "Adding a function with wrapper macro":
     test "No params, no return":

@@ -1459,7 +1459,7 @@ proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
   var msg = newString errMsg.len - index
   
   discard errMsg.parseUntil(msg, '\x00', index)
-  template doRaise(kind: untyped) = raise (ref kind)(msg: msg, orig: addr exception)  
+  template doRaise(kind: untyped) = raise (ref kind)(msg: msg, orig: unsafeAddr exception)  
 
   # Make the error be more refined
   case errorType
@@ -1472,7 +1472,7 @@ proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
   of "TypeError":
     doRaise(JSTypeError)
   else:
-    raise (ref JSError)(msg: errMsg, orig: addr exception)
+    raise (ref JSError)(msg: errMsg, orig: unsafeAddr exception)
     
 proc getProperty*(ctx: JSContextRef, obj: JSObjectRef, propName: string): JSValueRef =
   ## See `getProperty <#getProperty%2CJSContextRef%2CJSObjectRef%2CJSStringRef%2Cptr.JSValueRef>`_.
@@ -1537,7 +1537,7 @@ proc toJSValue*[T: object](ctx: JSContextRef, val: T, exception: JSValueRef,
   let tmp = ctx.makeObject(jsClass, data)
   for name, value in val.fieldPairs():
     let key = createJSString(name)
-    ctx.setProperty(tmp, key, ctx.toJSValue(value), 0, addr exception)
+    ctx.setProperty(tmp, key, ctx.toJSValue(value), 0, unsafeAddr exception)
     release key
     if not exception.isNil:
       return
@@ -1561,14 +1561,13 @@ proc toJSValue*[T](ctx: JSContextRef, val: openArray[T], exception: JSValueRef):
   for i, item in val:
     items[i] = ctx.toJSValue(item)
 
-  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, addr items[0], addr exception))
+  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, addr items[0], unsafeAddr exception))
   
 
 proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSValueRef): JSValueRef {.makeRaiser.} =
   ## Converts a Nim `DateTime` into a JS `DateTime`
   var dateStr = ctx.toJSValue($val)
-  result = cast[JSValueRef](ctx.makeDate(1, addr dateStr, addr exception))
-
+  result = cast[JSValueRef](ctx.makeDate(1, addr dateStr, unsafeAddr exception))
 
 
 #
@@ -1580,16 +1579,16 @@ proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSValueRef): JSValu
 proc fromJSValue*[T: SomeInteger](ctx: JSContextRef, val: JSValueRef, 
                                   kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
   ## Converts a JS number to a Nim number
-  result = kind(ctx.toNumber(val, addr exception))
+  result = kind(ctx.toNumber(val, unsafeAddr exception))
 
 proc fromJSValue*[T: object](ctx: JSContextRef, val: JSValueRef, 
                              kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
   ## Makes an `object` from a JSValue_
-  let obj = ctx.toObject(val, addr exception)
+  let obj = ctx.toObject(val, unsafeAddr exception)
   if not obj.isNil:
     for name, value in result.fieldPairs():
       let cName = createJSString(name)
-      let jsVal = ctx.getProperty(obj, cName, addr exception)
+      let jsVal = ctx.getProperty(obj, cName, unsafeAddr exception)
       if jsVal.isNil:
         return
         
@@ -1599,7 +1598,7 @@ proc fromJSValue*[T: object](ctx: JSContextRef, val: JSValueRef,
 proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef,
                              kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
   ## Makes a `string` from a JSValue_
-  result = $ctx.toString(val, addr exception)
+  result = $ctx.toString(val, unsafeAddr exception)
 
 proc fromJSValue*(ctx: JSContextRef, val: JSValueRef, kind: typedesc[bool]): bool =
   ## Makes a `bool` from a JSValue_
@@ -1608,7 +1607,7 @@ proc fromJSValue*(ctx: JSContextRef, val: JSValueRef, kind: typedesc[bool]): boo
 template fromArrayLikeImpl(length: int) =
   ## Expects `exception` and `obj` to be declared in calling site
   for i in 0..<length:
-    let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, addr exception)
+    let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, unsafeAddr exception)
     if not exception.isNil: return
     result[i] = ctx.fromJSValue(jsVal, T, exception)
     if not exception.isNil: return
@@ -1616,14 +1615,14 @@ template fromArrayLikeImpl(length: int) =
 proc fromJSValue*[K: static[int], T](ctx: JSContextRef, val: JSValueRef, 
                                      kind: typedesc[array[K, T]], exception: JSValueRef): array[K, T] {.makeRaiser.} =
   ## Makes an `array[T]`` from a JSValue_
-  let obj = ctx.toObject(val, addr exception)
+  let obj = ctx.toObject(val, unsafeAddr exception)
   if not exception.isNil: return
   fromArrayLikeImpl(K)
 
 proc fromJSValue*[T](ctx: JSContextRef, val: JSValueRef, 
                      kind: typedesc[seq[T]], exception: JSValueRef): seq[T] {.makeRaiser.} =
   ## Makes a `seq[T]` from a JSValue_
-  let obj = ctx.toObject(val, addr exception)
+  let obj = ctx.toObject(val, unsafeAddr exception)
   if not exception.isNil: return
   
   let length = ctx.fromJSValue(ctx.getProperty(obj, "length"), int, exception)
@@ -1826,7 +1825,7 @@ macro makeJSClassWrapper*(typ: typedesc[ref object]) =
         var classDef = JSClassDefinitionEmpty
         let staticValues {.global.} = `staticValues`
         classDef.className = `name`
-        var staticValuesPtr = addr staticValues[0]
+        var staticValuesPtr = unsafeAddr staticValues[0]
         {.emit: [classDef, ".staticValues = ", staticValuesPtr, ";"].}
         # classDef.callbacks.callbacks.staticValues = addr staticValues[0]
         class = classCreate(addr classDef)
