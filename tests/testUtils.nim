@@ -10,3 +10,4 @@ test "Finding proc that has overloads":
     findProc(fun, int)(9) == 9
     
   check not compiles(findProc(fun, bool))
+

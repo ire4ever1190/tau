@@ -13,3 +13,5 @@ let
   session* = createSession(renderer, false, "testInterop")
   viewConfig* = createViewConfig()
   view* = renderer.createView(500, 500, viewConfig, session)
+
+view.setAddConsoleMessageCallback(echoConsoleCallback, nil)

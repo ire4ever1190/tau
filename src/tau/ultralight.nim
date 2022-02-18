@@ -155,15 +155,15 @@ proc isEmpty*(str: ULStringRaw): bool {.importc: "ulStringIsEmpty".}
   ## Whether this string is empty or not.
   
 # TODO: allow these assigns to be used with `=` operator
-proc assign*(str: ULStringRaw, newStr: ULStringRaw) {.importc: "ulStringAssignString".}
+proc assign*(str: var ULStringRaw, newStr: ULStringRaw) {.importc: "ulStringAssignString".}
   ## Replaces the contents of **str** with the contents of **new_str**
   
-proc assign*(str: ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCString".}
+proc assign*(str: var ULStringRaw, newStr: cstring) {.importc: "ulStringAssignCString".}
   ## Replaces the contents of **str** with the contents of a `cstring`.
 
 
 type
-  UltralightString = object # ULString is equivilant to this
+  UltralightString {.bycopy.} = object # ULString is equivilant to this
     # TODO, Forgo helper procs and use this directly? 
     # Just need to know how to make it a weak/strong pointer
     data: cstring
@@ -176,6 +176,20 @@ proc copyTo*(str: ULStringRaw, newStr: var string) =
   for i in 0..<ulStr.length:
     newStr[i] = ulStr.data[i]
 
+when false:
+  # Causes 'free(): invalid pointer' when destroying the string currently
+  # Adding characters to end works, maybe it allocates ahead?
+  proc add*(str: var ULStringRaw, other: cstring) =
+    ## Adds `other` to `str`
+    var ulStr = cast[ptr UltraLightString](str)
+    let 
+      oldLen = int(ulStr.length)
+      newLen = oldLen + other.len
+    let newStr = cast[cstring](reallocImpl(cast[pointer](ulStr.data), newLen))
+    ulStr.data = newStr
+    for i in 0 ..< other.len:
+      ulStr.data[oldLen + i] = other[i]
+    ulStr.length = csize_t(newLen)
 
 #
 # Bitmap
@@ -791,26 +805,23 @@ proc echoConsoleCallback*(data: pointer, caller: ViewWeak, source: MessageSource
   # TODO: Create a version that uses normal nim logging
   echo message
 
-proc domReadyClosureCallback(data: pointer, caller: ViewWeak, id: culonglong, mainFrame: bool, url: ULStringWeak) {.cdecl.}=
-  # Get the function and enviroment pointers stored in data
-  # let info = cast[ClosureProc](data)[]
-  # echo repr data
-  # echo "===="
-  let info = cast[ptr tuple[fun: pointer, env: pointer]](data)[]
-  cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)
-  # echo repr info
-  # Call the function while passing the enviroment
-  # echo "called thing"
+when false:
+  proc domReadyClosureCallback(data: pointer, caller: ViewWeak, id: culonglong, mainFrame: bool, url: ULStringWeak) {.cdecl.}=
+    # Get the function and enviroment pointers stored in data
+    let info = cast[ptr tuple[fun: pointer, env: pointer]](data)[]
+    cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)
+    # echo repr info
+    # Call the function while passing the enviroment
+    # echo "called thing"
   
 
-proc setDOMReadyCallback*(view: View, prc: pointer) =
-  ## Sets the event to be called when the DOM is ready.
-  ## While this doesn't have a data parameter to pass info, it allows you to use closure procs
-  # var data = ClosureProc(fun: prc.rawProc(), env: prc.rawEnv())
-  # GC_ref data # Data needs to stay alive for the entire program (this leaks 2 bytes of data doesn't it?)
-  # echo repr unsafeAddr prc
-  # echo "===="
-  view.setDOMReadyCallback(domReadyClosureCallback, prc)
-  # let info = cast[ptr tuple[fun: pointer, env: pointer]](unsafeAddr prc)[]
-  # cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)
-  # echo "here"
+  proc setDOMReadyCallback*(view: View, prc: pointer) =
+    ## Sets the event to be called when the DOM is ready.
+    ## While this doesn't have a data parameter to pass info, it allows you to use closure procs
+    # var data = ClosureProc(fun: prc.rawProc(), env: prc.rawEnv())
+    # GC_ref data # Data needs to stay alive for the entire program (this leaks 2 bytes of data doesn't it?)
+    # echo repr unsafeAddr prc
+    # echo "===="
+    view.setDOMReadyCallback(domReadyClosureCallback, prc)
+    # let info = cast[ptr tuple[fun: pointer, env: pointer]](unsafeAddr prc)[]
+    # cast[proc (env: pointer) {.nimcall.}](info.fun)(info.env)

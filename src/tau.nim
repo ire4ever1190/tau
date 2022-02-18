@@ -5,14 +5,14 @@
 ## Procs for both levels are named similarly except the creation procs which have `ul` prefix for low level
 
 import tau/[
-  appcore,
   common,
   ultralight,
-  javascriptcore
+  javascriptcore,
+  appcore
 ]
 
 export
-  appcore,
   common,
   ultralight,
-  javascriptcore
+  javascriptcore,
+  appcore

@@ -23,15 +23,15 @@ const
   usingThreads = compileOption("threads")
 
 const
-  DLLAppCore*        = "libAppCore.so"
-  DLLUltraLightCore* = "libUltralightCore.so"
   DLLUltraLight*     = "libUltralight.so"
+  DLLUltraLightCore* = "libUltralightCore.so"
   DLLWebCore*        = "libWebCore.so"
+  DLLAppCore*        = "libAppCore.so"
 
 
-{.passL: "-lWebCore".}
 {.passL: "-lUltralight".}
 {.passL: "-lUltralightCore".}
+{.passL: "-lWebCore".}
 {.passC: "-I" & headerFolder.}
 
 {.experimental: "overloadableEnums".}
@@ -288,7 +288,7 @@ template pass*[T](obj: WrapperObject[T]): T =
   obj.internal
 
 type ## Callbacks
-  ResizeCallback*   = proc (data: pointer, width, height: cuint) {.nimcall, cdecl.}
+  ResizeCallback*   = proc (data: pointer, window: WindowWeak, width, height: cuint) {.nimcall, cdecl.}
 
 type ## Aliases
   ULChar16* = cushort
@@ -425,4 +425,3 @@ macro wrap(cName: static[string], prc: untyped): untyped =
         ident "inline"
       )
     )
-  #echo result.toStrLit

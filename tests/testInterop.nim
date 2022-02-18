@@ -4,15 +4,27 @@ import std/unittest
 import tau
 import utils
 include headlessApp
+import std/times
 
 type
   Person = object
     name: string
     age: int
 
-proc evalScript[T](ctx: JSContextRef, script: string, retType: typedesc[T]): T = 
-  ## Run script and convert return value to a Nim type
-  result = ctx.fromJSValue(ctx.evalScript(script), retType)
+type
+  RefPerson = ref Person
+
+  ComplexType = ref object
+    a {.jsHide.}, b {.jsHide.}: string
+    name {.jsReadOnly.}: string
+    allowed: bool
+
+
+proc returnA(c: ComplexType): string =
+  result = c.a
+
+makeTypeWrapper(RefPerson)
+makeTypeWrapper(ComplexType, returnA)
     
 
 withJSCtx view:
@@ -23,13 +35,12 @@ withJSCtx view:
 
     test "string":
       check ctx.evalScript("'Hello World'", string) == "Hello World"
-
+      
     test "bool":
       check:
         not ctx.evalScript("false", bool)
         ctx.evalScript("true", bool)
-        ctx.evalScript("1", bool)
-        
+    
     test "object":
 
       let john = ctx.evalScript("""
@@ -83,7 +94,11 @@ withJSCtx view:
             Person(name: "Tory Done", age: 43),
             Person(name: "Harry Smith", age: 104)
           ]
-
+    test "DateTime":
+      # We cant be exact to just roughly check
+      # check ctx.evalScript("new Date(Date.now())", DateTime) == now()
+      check (now() - ctx.evalScript("new Date(Date.now())", DateTime)).inSeconds <= 1
+      
   suite "toJSValue":
     proc toAndBack[T](ctx: JSContextRef, val: T): T =
       ## Converts val into a JSValue and converts it back
@@ -146,16 +161,6 @@ withJSCtx view:
         discard ctx.evalScript("'hello'.speak()")
 
   suite "Adding a ref object via JSClass":
-    type
-      RefPerson = ref Person
-
-      ComplexType = ref object
-        a, b {.jsHide.}: bool
-        name {.jsReadOnly.}: string
-        section: string
-    
-    
-    makeJSClassWrapper(RefPerson)
 
     test "Sending object across":
       let person = RefPerson(
@@ -166,7 +171,36 @@ withJSCtx view:
       check ctx.evalScript("john.name", string) == "John"
       person.name = "Not John"
       check ctx.evalScript("john.name", string) == "Not John"
-    
+
+
+    test "Pragmas are respected":
+      let complex = ComplexType(
+        a: "aValue",
+        b: "bValue",
+        name: "constant",
+        allowed: true
+      )
+      let ob = ctx.makeObject(ComplexType.makeJSClass, cast[pointer](complex))
+      ctx.addToWindow("comp", cast[JSValueRef](ob))
+      # Hidden values
+      template isUndefined(x: JSValueRef): bool =
+        ctx.isUndefined(x)
+      check ctx.evalScript("comp.a").isUndefined
+      check ctx.evalScript("comp.b").isUndefined
+      # Read only value
+      discard ctx.evalScript("comp.name = 'test'")
+      check ctx.evalScript("comp.name", string) == "constant"
+
+      check ctx.evalScript("comp.allowed", bool)
+
+    test "Object function":
+      let complex = ComplexType(
+        a: "This is a value"
+      )
+      let ob = ctx.makeObject(ComplexType.makeJSClass, cast[pointer](complex))
+      ctx.addToWindow("comp", cast[JSValueRef](ob))
+      check ctx.evalScript("comp.returnA()", string) == "This is a value"
+      
   suite "Adding a function with wrapper macro":
     test "No params, no return":
       var ret: int # Still need to make sure it is called
@@ -174,7 +208,7 @@ withJSCtx view:
       proc simple() =
         ret = 90
 
-      makeWrapper("simpleJS", simple)
+      makeProcWrapper("simpleJS", simple, exportProc = false)
 
       ctx.addToWindow("simple", simpleJS)
       discard ctx.evalScript("simple()")
@@ -186,26 +220,41 @@ withJSCtx view:
       proc simple(x: int) =
         ret = x
 
-      makeWrapper("simpleJS", simple)
+      makeProcWrapper("simpleJS", simple, exportProc = false)
       ctx.addToWindow("simple", simpleJS)
 
     test "Return value":
       proc addNums(x, y: int): int =
         result = x + y
 
-      makeWrapper("addJS", addNums)
+      makeProcWrapper("addJS", addNums, exportProc = false)
       ctx.addToWindow("add", addJS)
       check ctx.evalScript("add(9, 14)", int) == 23
 
     test "Invalid params":
       proc addNums(x, y: int): int =
         result = x + y
-      makeWrapper("addJS", addNums)
+      makeProcWrapper("addJS", addNums, exportProc = false)
       ctx.addToWindow("add", addJS)
 
       expect JSError:
         discard ctx.evalScript("add(9)", int)
-      echo ctx.evalScript("TypeError", string)
-      # expect JSTypeError:
-        # discard ctx.evalScript("add('hello', 9)", int)
+
+    test "Object function":
+      let
+        person = RefPerson(name: "Jake")
+        obj = ctx.makeObject(RefPerson.makeJSClass(), cast[pointer](person))
     
+      proc sayName(person: RefPerson): string =
+        result = person.name
+      makeProcWrapper("sayNameJS", sayName, exportProc = false, isObjFunc = true)
+      
+      let cname = createJSString "sayName"
+      let funObj = ctx.makeFunctionWithCallback(cname, sayNameJS)
+      release cname      
+
+      var exception: JSValueRef
+      let result = ctx.callAsFunction(funObj, obj, 0, nil, addr exception)
+      if not exception.isNil:
+        ctx.throwNim exception 
+      check ctx.fromJSValue(result, string) == "Jake"

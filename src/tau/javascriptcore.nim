@@ -2,9 +2,11 @@ import common {.all.}
 import std/macros
 import std/times
 import std/strformat
-import std/parseutils
+import macroUtils {.all.}
+import std/genasts
 
 {.experimental: "overloadableEnums".}
+{.experimental: "codeReordering".}
 
 ##[
   This contains wrappers for javascriptcore along with helpers for repititative tasks
@@ -16,9 +18,61 @@ import std/parseutils
   Values can be converted between Nim and JS via `toJSValue` and `fromJSValue` procs. Most of these procs
   have two different versions with the difference between the versions being that one allows you to handle `JSExceptions` yourself
   while the other automatically raises a Nim exception
-  
+
+  You can overload the procs that are used for conversion so that your types are converted differently
+
+  .. code-block:: nim
+
+    proc fromJSValue(ctx: JSContextRef, val: JSValueRef, kind: typedesc[YourType], exception: JSException): YourType =
+      # Convert the value stored in val
+
+    proc toJSValue(ctx: JSContextRef, val: YourType, exception: JSException): JSValueRef = # exception parameter is optional
+      # Convert YourType to a JS value somehow
+
+  Garbage Collection
+  ==================
+
+  `Here <https://docs.ultralig.ht/docs/garbage-collected-types>`_ has a good overview on the garbage collection for Javascript types.
+  For other types, it follows the same create/release rule i.e. You release everything that you create yourself
+
+
+  Object vs Ref Objects
+  ======================
+
+  Both `object` and `ref object` types can be sent to JS. The difference is that `objects` are copied while `ref objects` are shared.
+  The example below shows the difference between the two
 ]##
 
+runnableExamples:
+  include ../tests/headlessApp
+
+  type
+    PersonObj = object
+      name: string
+    Person = ref PersonObj
+
+  makeTypeWrapper(Person) # This needs to be called before being sent to JS
+  
+  withJSCtx view:
+    let
+      personA = PersonObj(name: "foo")
+      personB = Person(name: "bar")
+
+      jsValA = ctx.toJSValue(personA)
+      jsValB = ctx.toJSValue(personB)
+
+    ctx.addToWindow({
+      "personA": jsValA,
+      "personB": jsValB
+    })
+
+    # Only the name on the JS side is getting edited
+    discard ctx.evalScript("window.personA.name = 'not foo'")
+    doAssert personA.name == "foo"
+
+    # The name is changed via a setter and edits both JS and Nim sides
+    discard ctx.evalScript("window.personB.name = 'not bar'")
+    doAssert personB.name == "not bar"
 
 # TODO: Make high level api
 # something like this?
@@ -342,49 +396,23 @@ type
     ## * **callAsFunction**: A JSObjectCallAsFunctionCallback to invoke when the property is called as a function.
     ## * **attributes**: A set of attributes to give to the property.
     name*: cstring
-    callAsFunction: JSObjectCallAsFunctionCallback
+    callAsFunction*: JSObjectCallAsFunctionCallback
     attributes*: set[JSPropertyAttribute]
 
   JSStaticFunctionEx* {.bycopy, importc.} = object
     ## Extension of JSStaticFunction* for use with class version 1000
     name*: cstring
-    callAsFunction: JSObjectCallAsFunctionCallbackEx
+    callAsFunction*: JSObjectCallAsFunctionCallbackEx
     attributes*: set[JSPropertyAttribute]
 
 
-  JSClassCallbacks* {.bycopy, union.} = object
-    staticValues*: ptr JSStaticValue
-    staticFunctions*: ptr JSStaticFunction
-    initialize*: JSObjectInitializeCallback
-    finalize*: JSObjectFinalizeCallback
-    hasProperty*: JSObjectHasPropertyCallback
-    getProperty*: JSObjectGetPropertyCallback
-    setProperty*: JSObjectSetPropertyCallback
-    deleteProperty*: JSObjectDeletePropertyCallback
-    getPropertyNames*: JSObjectGetPropertyNamesCallback
-    callAsFunction*: JSObjectCallAsFunctionCallback
-    callAsConstructor*: JSObjectCallAsConstructorCallback
-    hasInstance*: JSObjectHasInstanceCallback
-    convertToType*: JSObjectConvertToTypeCallback
+  # JSClassCallbacks* {.bycopy, union.} = object
     
-  JSClassCallbacksEx* {.bycopy, union.} = object
-    staticValuesEx*: ptr JSStaticValueEx
-    staticFunctionsEx*: ptr JSStaticFunctionEx
-    initializeEx*: JSObjectInitializeCallbackEx
-    finalizeEx*: JSObjectFinalizeCallbackEx
-    hasPropertyEx*: JSObjectHasPropertyCallbackEx
-    getPropertyEx*: JSObjectGetPropertyCallbackEx
-    setPropertyEx*: JSObjectSetPropertyCallbackEx
-    deletePropertyEx*: JSObjectDeletePropertyCallbackEx
-    getPropertyNamesEx*: JSObjectGetPropertyNamesCallbackEx
-    callAsFunctionEx*: JSObjectCallAsFunctionCallbackEx
-    callAsConstructorEx*: JSObjectCallAsConstructorCallbackEx
-    hasInstanceEx*: JSObjectHasInstanceCallbackEx
-    convertToTypeEx*: JSObjectConvertToTypeCallbackEx
-
-  JSClassCallbacksUnion* {.bycopy, union.} = object
-    callbacks: JSClassCallbacks
-    callbacksEx: JSClassCallbacksEx
+  # JSClassCallbacksEx* {.bycopy, union.} = object
+# 
+  # JSClassCallbacksUnion* {.bycopy, union.} = object
+    # callbacks: JSClassCallbacks
+    # callbacksEx: JSClassCallbacksEx
     
   JSClassDefinition* {.bycopy, importc.} = object
     ## This structure contains properties and callbacks that define a type of object. All fields other than the version field are optional. Any pointer may be `nil`.
@@ -416,10 +444,36 @@ type
     attributes: set[JSClassAttribute]
     className*: cstring
     parentClass*: JSClassRef
-    callbacks*: JSClassCallbacksUnion
+    # callbacks*: JSClassCallbacksUnion
     privateData*: pointer
 
+    staticValues*: ptr JSStaticValue
+    staticFunctions*: ptr JSStaticFunction
+    initialize*: JSObjectInitializeCallback
+    finalize*: JSObjectFinalizeCallback
+    hasProperty*: JSObjectHasPropertyCallback
+    getProperty*: JSObjectGetPropertyCallback
+    setProperty*: JSObjectSetPropertyCallback
+    deleteProperty*: JSObjectDeletePropertyCallback
+    getPropertyNames*: JSObjectGetPropertyNamesCallback
+    callAsFunction*: JSObjectCallAsFunctionCallback
+    callAsConstructor*: JSObjectCallAsConstructorCallback
+    hasInstance*: JSObjectHasInstanceCallback
+    convertToType*: JSObjectConvertToTypeCallback
   
+    staticValuesEx*: ptr JSStaticValueEx
+    staticFunctionsEx*: ptr JSStaticFunctionEx
+    initializeEx*: JSObjectInitializeCallbackEx
+    finalizeEx*: JSObjectFinalizeCallbackEx
+    hasPropertyEx*: JSObjectHasPropertyCallbackEx
+    getPropertyEx*: JSObjectGetPropertyCallbackEx
+    setPropertyEx*: JSObjectSetPropertyCallbackEx
+    deletePropertyEx*: JSObjectDeletePropertyCallbackEx
+    getPropertyNamesEx*: JSObjectGetPropertyNamesCallbackEx
+    callAsFunctionEx*: JSObjectCallAsFunctionCallbackEx
+    callAsConstructorEx*: JSObjectCallAsConstructorCallbackEx
+    hasInstanceEx*: JSObjectHasInstanceCallbackEx
+    convertToTypeEx*: JSObjectConvertToTypeCallbackEx
     
 {.pop.}    
 
@@ -866,12 +920,12 @@ proc isFunction*(ctx: JSContextRef, obj: JSObjectRef): bool {.importc: "JSObject
   ## * **returns**: `true` if the object can be called as a function, otherwise `false`.
   ## 
 
-proc callAsFunction*(ctx: JSContextRef, obj: JSObjectRef, thisObject: JSObjectRef, argumentCount: csize_t, arguments: UncheckedArray[JSValueRef], exception: ptr JSValueRef): JSValueRef {.importc: "JSObjectCallAsFunction".}
+proc callAsFunction*(ctx: JSContextRef, fun: JSObjectRef, this: JSObjectRef, argumentCount: csize_t, arguments: ptr JSValueRef, exception: ptr JSValueRef): JSValueRef {.importc: "JSObjectCallAsFunction".}
   ##  Calls an object as a function.
   ## 
   ## * **ctx**: The execution context to use.
-  ## * **obj**: The JSObjectRef_ to call as a function.
-  ## * **thisObject**: The object to use as "this," or `nil` to use the global object as "this."
+  ## * **fun**: The JSObjectRef_ to call as a function.
+  ## * **this**: The object to use as "this," or `nil` to use the global object as "this."
   ## * **argumentCount**: An integer count of the number of arguments in arguments.
   ## * **arguments**: A JSValue array of arguments to pass to the function. Pass `nil` if argumentCount is 0.
   ## * **exception**: A pointer to a JSValueRef_ in which to store an exception, if any. Pass `nil` if you do not care to store an exception.
@@ -1419,6 +1473,8 @@ proc jsString*(str: cstring): JSStringRef {.inline.} =
 # TODO, handle exceptions
 
 proc toJSValue*(ctx: JSContextRef, val: string): JSValueRef
+proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T
+proc getProperty*[T](ctx: JSContextRef, obj: JSObjectRef, propName: string, kind: typedesc[T]): T
 
 proc setJSException*(ctx: JSContextRef, msg: string, exception: JSException) =
   ## Sets the exception pointer so that an exception is raised in the javascript context.
@@ -1434,6 +1490,11 @@ proc addToWindow*(ctx: JSContextRef, name: string, val: JSValueRef) =
   ctx.setProperty(ctx.globalObj, name, val, 0, nil)
   release name
 
+proc addToWindow*(ctx: JSContextRef, vals: openArray[(string, JSValueRef)]) =
+  ## Adds a key/value map of values to the window object
+  for (name, val) in vals:
+    ctx.addToWindow(name, val)
+
 proc addToWindow*(ctx: JSContextRef, name: string, prc: JSObjectCallAsFunctionCallback) =
   ## Adds a function to the javascript context
   let cname = createJSString name
@@ -1441,28 +1502,24 @@ proc addToWindow*(ctx: JSContextRef, name: string, prc: JSObjectCallAsFunctionCa
   ctx.addToWindow(name, jsFun)
   release cname
 
-proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef, kind: typedesc[T]): T
+
 
 proc isNil*(val: JSValueRef | JSObjectRef): bool {.inline.} =
   result = val.JSPtr == nil
+
 
 proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
   ## Throws a Nim exception from a `JSException` that has been returned from a proc
   assert not exception.isNil, "No exception has occured"
   # Stop showing off with "clever" code, make this less convoluted
-  var
-    errorType: string
-    index = 0
-  let errMsg = ctx.fromJSValue(exception, string)
-  index += errMsg.parseUntil(errorType, ':') + 2
+  let 
+    errMsg = ctx.getProperty(cast[JSObjectRef](exception), "message", string)
+    errType = ctx.getProperty(cast[JSObjectRef](exception), "name", string)
 
-  var msg = newString errMsg.len - index
-  
-  discard errMsg.parseUntil(msg, '\x00', index)
-  template doRaise(kind: untyped) = raise (ref kind)(msg: msg, orig: unsafeAddr exception)  
+  template doRaise(kind: untyped) = raise (ref kind)(msg: errMsg, orig: unsafeAddr exception)  
 
   # Make the error be more refined
-  case errorType
+  case errType
   of "ReferenceError":
     doRaise(JSReferenceError)
   of "RangeError":
@@ -1472,7 +1529,7 @@ proc throwNim*(ctx: JSContextRef, exception: JSValueRef) =
   of "TypeError":
     doRaise(JSTypeError)
   else:
-    raise (ref JSError)(msg: errMsg, orig: unsafeAddr exception)
+    doRaise(JSError)
     
 proc getProperty*(ctx: JSContextRef, obj: JSObjectRef, propName: string): JSValueRef =
   ## See `getProperty <#getProperty%2CJSContextRef%2CJSObjectRef%2CJSStringRef%2Cptr.JSValueRef>`_.
@@ -1483,6 +1540,12 @@ proc getProperty*(ctx: JSContextRef, obj: JSObjectRef, propName: string): JSValu
     ctx.throwNim exception
     
   release jsName
+  
+proc getProperty*[T](ctx: JSContextRef, obj: JSObjectRef, propName: string, kind: typedesc[T]): T =
+  ## Runs `getProperty <#getProperty%2CJSContextRef%2CJSObjectRef%2CJSStringRef%2Cptr.JSValueRef>`_ and then converts the property to `T`
+  let jsVal = ctx.getProperty(obj, propName)
+  result = ctx.fromJSValue(jsVal, kind)
+
 
 #
 # High level converters for conversion of Nim types to JSValueRefs
@@ -1496,10 +1559,14 @@ macro makeRaiser(prc: untyped) =
     inCall = nnkCall.newTree(prc.name) # Call to function that doesn't handle exception
   for i, param in prc.params:
     if i > 0:
+      # If the parameter isn't the exception, then add it to the new procs parameters
       if not param[0].eqIdent("exception"):
         newParams &= param
-      inCall &= ident $param[0]
+        inCall &= ident $param[0]
+      else:
+        inCall &= nnkCommand.newTree(ident "unsafeAddr", exceptionIdent)
     else:
+      # Add return type
       newParams &= param
     
   let body = quote do:
@@ -1516,9 +1583,20 @@ macro makeRaiser(prc: untyped) =
       body
     )  
   )
-  
   result[1][2] = prc[2] # Copy generic parameters
-  
+
+template expectType*(ctx: JSContextRef, val: JSValueRef, exception: JSException, kind: JSType, body: untyped) =
+  ## Only runs body if **val** is of type **kind**.
+  ## If it isn't then it raises a `ValueError` on the javascript side
+  let valType = ctx.getTypeOf(val)
+  if valType == kind:
+    body
+  else:
+    ctx.setJSException("ValueError: Expected " & $kind & " but got " & $valType, exception)
+    
+proc makeJSClass[T: ref object](x: typedesc[T]): JSClassRef =
+  ## .. Important:: You need to call makeJSClassWrapper_ first, this will give a compile time error if you don't
+  {.error: "Call makeJSClass first".}
 
 proc toJSValue*[T: SomeFloat | SomeInteger](ctx: JSContextRef, val: T): JSValueRef {.inline.} = 
   ## Converts a number into a JS value
@@ -1528,7 +1606,7 @@ proc toJSValue*(ctx: JSContextRef, val: string): JSValueRef =
   let str = jsString(val.cstring)
   ctx.makeString(str) # We don't need to free str since the context will free it
 
-proc toJSValue*[T: object](ctx: JSContextRef, val: T, exception: JSValueRef, 
+proc toJSValue*[T: object](ctx: JSContextRef, val: T, exception: JSException, 
                            jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef {.makeRaiser.} = 
   ## Converts an object into a JS object
   ## 
@@ -1537,15 +1615,25 @@ proc toJSValue*[T: object](ctx: JSContextRef, val: T, exception: JSValueRef,
   let tmp = ctx.makeObject(jsClass, data)
   for name, value in val.fieldPairs():
     let key = createJSString(name)
-    ctx.setProperty(tmp, key, ctx.toJSValue(value), 0, unsafeAddr exception)
+    # TODO, make toJSValue use this procs exception pointer
+    when compiles(ctx.toJSValue(value, exception)):
+      let jsVal = ctx.toJSValue(value, exception)
+      if exception[].isNil: return
+    else:
+      let jsVal = ctx.toJSValue(value)
+      
+    ctx.setProperty(tmp, key, jsVal, 0, exception)
     release key
-    if not exception.isNil:
+    if not exception[].isNil:
       return
   result = cast[JSValueRef](tmp)
 
-proc toJSValue*[T: ref object](ctx: JSContextRef, val: T, exception: JSValueRef, 
-                               jsClass: JSClassRef = nil, data: pointer = nil): JSValueRef {.makeRaiser.} =
-  ctx.toJSValue(val[], exception, jsClass, data)
+proc toJSValue*[T: ref object](ctx: JSContextRef, val: T): JSValueRef =
+  ## Converts a ref object into a JS value. You must have called makeTypeWrapper_ on your type before calling this.
+  ## ref objects sent across can have there values edited from javascript
+  GC_ref(val)
+  mixin makeJSClass
+  result = cast[JSValueRef](ctx.makeObject(makeJSClass(T), cast[pointer](val)))
 
 proc toJSValue*[T: JSValueRef](ctx: JSContextRef, val: T): JSValueRef {.inline.} = val
 proc toJSValue*[T: JSObjectRef](ctx: JSContextRef, val: T): JSValueRef {.inline.} = cast[JSValueRef](val)
@@ -1555,19 +1643,24 @@ proc toJSValue*(ctx: JSContextRef, val: bool): JSValueRef {.inline.} =
   ctx.makeBool(val)
 
 
-proc toJSValue*[T](ctx: JSContextRef, val: openArray[T], exception: JSValueRef): JSValueRef {.makeRaiser.} =
+proc toJSValue*[T](ctx: JSContextRef, val: openArray[T], exception: JSException): JSValueRef {.makeRaiser.} =
   ## Converts items in a sequence into a JS array
   var items = newSeq[JSValueRef](val.len)
   for i, item in val:
-    items[i] = ctx.toJSValue(item)
+    when compiles(ctx.toJSValue(item, exception)): 
+      items[i] = ctx.toJSValue(item, exception)
+      if not exception[].isNil:
+        return
+    else: 
+      items[i] = ctx.toJSValue(item)
 
-  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, addr items[0], unsafeAddr exception))
+  result = cast[JSValueRef](ctx.makeArray(val.len.csize_t, addr items[0], exception))
   
 
-proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSValueRef): JSValueRef {.makeRaiser.} =
+proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSException): JSValueRef {.makeRaiser.} =
   ## Converts a Nim `DateTime` into a JS `DateTime`
   var dateStr = ctx.toJSValue($val)
-  result = cast[JSValueRef](ctx.makeDate(1, addr dateStr, unsafeAddr exception))
+  result = cast[JSValueRef](ctx.makeDate(1, addr dateStr, exception))
 
 
 #
@@ -1575,61 +1668,100 @@ proc toJSValue*(ctx: JSContextRef, val: DateTime, exception: JSValueRef): JSValu
 #
 # Should danger turn off all exception checks?
 
+# TODO: enums
+
+proc fromJSValue*(ctx: JSContextRef, val: JSValueRef,
+                  kind: typedesc[DateTime], exception: JSException): DateTime {.makeRaiser.} =
+  ## Converts a JS date to a Nim Date
+  ctx.expectType(val, exception, Object):
+    let obj = cast[JSObjectRef](val)
+    # Get the toISOString function
+    let jsName = createJSString "toISOString"
+    let isoFunc = cast[JSObjectRef](ctx.getProperty(obj, jsName, exception))
+    release jsName
+    if not exception[].isNil:
+      return
+    # Call the function
+    let jsDateStr = ctx.callAsFunction(isoFunc, obj, 0, nil, exception)
+    if not exception[].isNil:
+      return
+    let str = ctx.fromJSValue(jsDateStr, string, exception)
+    result = str.parse("yyyy-MM-dd'T'hh:mm:ss'.'fff'Z'", tz=utc()).inZone(local())  
 
 proc fromJSValue*[T: SomeInteger](ctx: JSContextRef, val: JSValueRef, 
-                                  kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+                                  kind: typedesc[T], exception: JSException): T {.makeRaiser.} =
   ## Converts a JS number to a Nim number
-  result = kind(ctx.toNumber(val, unsafeAddr exception))
-
+  ctx.expectType(val, exception, Number):
+    result = kind(ctx.toNumber(val, exception))
+    
 proc fromJSValue*[T: object](ctx: JSContextRef, val: JSValueRef, 
-                             kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+                             kind: typedesc[T], exception: JSException): T {.makeRaiser.} =
   ## Makes an `object` from a JSValue_
-  let obj = ctx.toObject(val, unsafeAddr exception)
-  if not obj.isNil:
-    for name, value in result.fieldPairs():
-      let cName = createJSString(name)
-      let jsVal = ctx.getProperty(obj, cName, unsafeAddr exception)
-      if jsVal.isNil:
-        return
-        
-      value = ctx.fromJSValue(jsVal, typeof(value))
-      release cName
+  ctx.expectType(val, exception, Object):
+    let obj = ctx.toObject(val, exception)
+    if not obj.isNil:
+      for name, value in result.fieldPairs():
+        let cName = createJSString(name)
+        let jsVal = ctx.getProperty(obj, cName, exception)
+        if not exception[].isNil:
+          return
+        release cName
+        value = ctx.fromJSValue(jsVal, typeof(value), exception)
+        if not exception[].isNil:
+          return
       
+proc fromJSValue*[T: ref object](ctx: JSContextRef, val: JSValueRef,
+                                 kind: typedesc[T], exception: JSException): T {.makeRaiser.}=
+  ## Gets a ref object from a value.
+  ## Does this by accessing the private value
+  ctx.expectType(val, exception, Object):
+    let priv = cast[JSObjectRef](val).getPrivate()
+    if priv.isNil:
+      ctx.setJSException("Objects private pointer is not set to a ref object", exception)
+    result = cast[T](priv)
+  
 proc fromJSValue*[T: string](ctx: JSContextRef, val: JSValueRef,
-                             kind: typedesc[T], exception: JSValueRef): T {.makeRaiser.} =
+                             kind: typedesc[T], exception: JSException): T {.makeRaiser.} =
   ## Makes a `string` from a JSValue_
-  result = $ctx.toString(val, unsafeAddr exception)
-
-proc fromJSValue*(ctx: JSContextRef, val: JSValueRef, kind: typedesc[bool]): bool =
+  ctx.expectType(val, exception, String):
+    result = $ctx.toString(val, exception)
+    
+proc fromJSValue*(ctx: JSContextRef, val: JSValueRef, kind: typedesc[bool], 
+                  exception: JSException): bool {.makeRaiser.}=
   ## Makes a `bool` from a JSValue_
-  result = ctx.toBool(val)
+  ctx.expectType(val, exception, Boolean):
+    result = ctx.toBool(val)
 
 template fromArrayLikeImpl(length: int) =
   ## Expects `exception` and `obj` to be declared in calling site
   for i in 0..<length:
-    let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, unsafeAddr exception)
-    if not exception.isNil: return
+    let jsVal = ctx.getPropertyAtIndex(obj, i.cuint, exception)
+    if not exception[].isNil: return
     result[i] = ctx.fromJSValue(jsVal, T, exception)
-    if not exception.isNil: return
+    if not exception[].isNil: return
 
 proc fromJSValue*[K: static[int], T](ctx: JSContextRef, val: JSValueRef, 
-                                     kind: typedesc[array[K, T]], exception: JSValueRef): array[K, T] {.makeRaiser.} =
+                                     kind: typedesc[array[K, T]], exception: JSException): array[K, T] {.makeRaiser.} =
   ## Makes an `array[T]`` from a JSValue_
-  let obj = ctx.toObject(val, unsafeAddr exception)
-  if not exception.isNil: return
-  fromArrayLikeImpl(K)
+  ctx.expectType(val, exception, Object):
+    let obj = ctx.toObject(val, exception)
+    if not exception[].isNil: return
+    fromArrayLikeImpl(K)
 
 proc fromJSValue*[T](ctx: JSContextRef, val: JSValueRef, 
-                     kind: typedesc[seq[T]], exception: JSValueRef): seq[T] {.makeRaiser.} =
+                     kind: typedesc[seq[T]], exception: JSException): seq[T] {.makeRaiser.} =
   ## Makes a `seq[T]` from a JSValue_
-  let obj = ctx.toObject(val, unsafeAddr exception)
-  if not exception.isNil: return
-  
-  let length = ctx.fromJSValue(ctx.getProperty(obj, "length"), int, exception)
-  if not exception.isNil: return
-  
-  result = newSeq[T](length)
-  fromArrayLikeImpl(length)
+  ctx.expectType(val, exception, Object):
+    let obj = ctx.toObject(val, exception)
+    if not exception[].isNil: return
+    
+    let length = ctx.fromJSValue(ctx.getProperty(obj, "length"), int, exception)
+    if not exception[].isNil: return
+    
+    result = newSeq[T](length)
+    fromArrayLikeImpl(length)
+
+
 
 # TODO: Move to utils file
 macro findProc*(choices: typed, signature: varargs[typed]): untyped =
@@ -1638,7 +1770,7 @@ macro findProc*(choices: typed, signature: varargs[typed]): untyped =
     proc foo(a: string) = discard
     proc foo(a: int) = discard
     # We want to pass foo(int) to JS
-    makeWrapper("fooJS", findProc(foo, int))
+    makeProcWrapper("fooJS", findProc(foo, int))
 
   if choices.kind == nnkSym:
     # Just return sym if it has no overloads
@@ -1666,9 +1798,7 @@ macro findProc*(choices: typed, signature: varargs[typed]): untyped =
       return choice
   "Cannot find any overload that matches signature".error(choices)
 
-proc makeJSClass[T: ref object](x: typedesc[T]): JSClassRef =
-  ## .. Important:: You need to call makeJSClassWrapper_ first, this will give a compile time error if you don't
-  {.error: "Call makeJSClass first".}
+
 
 type
   ClassParameter = object
@@ -1688,11 +1818,12 @@ proc makeSignature(params: openArray[(string, string)], returnType = ""): seq[Ni
       newEmptyNode()
     )
 
-macro makeJSClassWrapper*(typ: typedesc[ref object]) =
+macro makeTypeWrapper*(typ: typedesc[ref object], procs: varargs[typed]) =
   ## Makes a wrapper around a ref object so that it can be shared directly between Nim/JS code i.e. changing
   ## its values on the JS side affects the Nim side.
   ##
   ## It is recommended to use this for big objects since this is quicker than converting the entire object
+  # Change interface to allow for more options e.g. make a constructor, add getter procs
   # TODO: Check if it is actually quicker
   # TODO: Optimise operations
   # TODO: Support oop (i.e. object of Something), maybe support this via JSClass inheritance also?
@@ -1704,11 +1835,13 @@ macro makeJSClassWrapper*(typ: typedesc[ref object]) =
   case body[0].kind
   of nnkSym:
     body = body[0].getImpl()[2]
+  of nnkObjectTy:
+    body = body[0]
   else: discard
 
   var params: seq[ClassParameter]    
 
-  # TODO: Make this for loop into a util, I do it often enough
+  # TODO: Make this for loop into a util proc, I do it often enough
   # Extract all the types out of the type defintion (Making sure to following if its an alias)
   # Property attributes are found by seeing what pragmas are attached to the property
   for identDef in body[2]:
@@ -1717,27 +1850,28 @@ macro makeJSClassWrapper*(typ: typedesc[ref object]) =
       block paramSect:
         var classParam = ClassParameter(attributes: {DontDelete}, kind: kind, setter: newNilLit())
         if param.kind == nnkPragmaExpr:
-          classParam.name = param[0]
+          classParam.name = param[0].extractName
           # Add options that relate to certain pragmas
           for prag in param[1]:
-            # Make faster method? Use caseStmt macro from dimscmd maybe?
-            # Don't believe the properties will expand much so this should be fine
             if prag.eqIdent("jsHide"):
               # Ignore the property
               break paramSect
-            elif prag.eqIdent("jsReadyOnly"):
+            elif prag.eqIdent("jsReadOnly"):
               classParam.attributes.incl ReadOnly
             elif prag.eqIdent("jsDontEnum"):
               classParam.attributes.incl DontEnum
         else:
-          classParam.name = param
+          classParam.name = param.extractName
         params &= classParam
 
+  let 
+    pragmas = nnkPragma.newTree(ident "cdecl")
+  result = newStmtList()
+  
+  # Forward declare the makeJSClass proc
+  result.add: genAstOpt({kDirtyTemplate}, typ):
+    proc makeJSClass*(obj: typedesc[typ]): JSClassRef
 
-
-  let pragmas = nnkPragma.newTree(ident "cdecl")
-
-  result = newStmtList() 
   # Create getters/setters
   var staticValues = nnkBracket.newTree()
   for parameter in params.mitems():
@@ -1791,11 +1925,11 @@ macro makeJSClassWrapper*(typ: typedesc[ref object]) =
         
       let setterBody = quote do:
         var obj = cast[`typ`](getPrivate `objIdent`)
-        template typ(): untyped = typeof(obj.`paramName`)
-        when compiles(ctx.fromJSValue(`valueIdent`, typ(), `exceptionIdent`)):
-          obj.`paramName` = ctx.fromJSValue(`valueIdent`, typ(), `exceptionIdent`)
-        else:
-          obj.`paramName` = ctx.fromJSValue(`valueIdent`, typ())
+        obj.`paramName` = ctx.fromJSValue(
+                                `valueIdent`, 
+                                typeof(obj.`paramName`),
+                                `exceptionIdent`
+                          )
         
         result = true
 
@@ -1814,31 +1948,85 @@ macro makeJSClassWrapper*(typ: typedesc[ref object]) =
       newColonExpr(ident "setProperty", parameter.setter),
       newColonExpr(ident "attributes", newLit parameter.attributes)
     )
-    break
-  # Create proc to make a class
+    
+  if staticValues.len > 0:
+    # Static values need to end with a nil name
+    staticValues &= nnkObjConstr.newTree(
+      ident "JSStaticValue",
+      newColonExpr(ident "name", newNilLit())
+    )
+
+  # Add all the functions that belong to the object
+  var staticProcs = nnkBracket.newTree()
+  for prc in procs:
+    let impl = prc.getImpl()
+    # if impl
+    let name = $genSym(nskProc, $prc)
+    let params = impl.parameters
+    if not params[1].kind.eqIdent(typ):
+      "First parameter must be the object for object procs".error(prc)
+      
+    staticProcs &= nnkObjConstr.newTree(
+      ident "JSStaticFunction",
+      newColonExpr(ident "name", newLit $name),
+      newColonExpr(ident "callAsFunction", ident $name),
+      newColonExpr(ident "attributes", newLit {ReadOnly, DontDelete})
+    )
+    result.add quote do:
+      makeProcWrapper(`name`, `prc`, isObjFunc = true)
+      
+  if staticProcs.len > 0:
+    # Static functions need to end with a nil name
+    staticProcs &= nnkObjConstr.newTree(
+      ident "JSStaticFunction",
+      newColonExpr(ident "name", newNilLit())
+    )
+
+  let
+    hasValues = staticValues.len > 0
+    hasProcs = staticProcs.len > 0
+    
+  # Create final procs
   # Reason a proc is used is so that later converter procs can easily know if
   # a class version of an object exists
-  result.add quote do:
-    proc makeJSClass(obj: typedesc[`typ`]): JSClassRef =
+  let 
+    finalizerIdent = genSym(nskProc, "finalizer")
+    makeClassIdent = ident "makeJSClass"
+  # Insert is needed since makeJSClass might be needed if any procs return the class
+  result.add: genAstOpt({kDirtyTemplate}, hasValues = staticValues.len > 0, hasProcs = staticProcs.len > 0,
+                     finalizer = genSym(nskProc, "finalizer"), name = name, typ = typ,
+                     staticVals = staticValues, staticPrcs = staticProcs):
+    proc finalizer(obj: JSObjectRef) {.cdecl.} =
+      # Mark the object for garbage collection
+      let obj = cast[typ](getPrivate obj)
+      GC_unref(obj) # Or should I call `=destroy`?
+
+    proc makeJSClass*(obj: typedesc[`typ`]): JSClassRef =
       var class {.global.}: JSClassRef
       once:
         var classDef = JSClassDefinitionEmpty
-        let staticValues {.global.} = `staticValues`
-        classDef.className = `name`
-        var staticValuesPtr = unsafeAddr staticValues[0]
-        {.emit: [classDef, ".staticValues = ", staticValuesPtr, ";"].}
-        # classDef.callbacks.callbacks.staticValues = addr staticValues[0]
+        # We use when statements since Nim cant infer the array if they are empty
+        when hasValues:
+          let tmpVals = staticVals
+          classDef.staticValues = unsafeAddr tmpVals[0]
+
+        when hasProcs:
+          let tmpFuncs = staticPrcs
+          classDef.staticFunctions = unsafeAddr tmpFuncs[0]
+
+        classDef.className = name
+        classDef.finalize = finalizer
         class = classCreate(addr classDef)
         
       result = class
       
-    
-
-macro makeWrapper*(name: static[string], prc: typed, ignoreArgs: static[bool] = false) =
+macro makeProcWrapper*(name: static[string], prc: typed, ignoreArgs: static[bool] = false, isObjFunc: static[bool] = false, exportProc: static[bool] = true): untyped =
   ## Makes a wrapper around a native Nim proc so that it can be called from JS.
   ## The wrapper (which will be named **name**) will have the same signature as JSObjectCallAsFunctionCallback_
   ##
+  ## * **name**: Name to give the generated proc
   ## * **ignoreArgs**: Whether to ignore the numbers of args passed in
+  ## * **isObjFunc**: Make it true when making a function for an object `myObject.myFunction()` (Objects private data will be passed as the first parameter)
   ##
   ## .. Note:: This still needs to be registered to the context using addToWindow_
   # TODO: Allow for do syntax
@@ -1849,16 +2037,19 @@ macro makeWrapper*(name: static[string], prc: typed, ignoreArgs: static[bool] = 
     proc runDB(query: string) =
       db.exec(sql(query))
 
-    makeWrapper("runDBJS", runDB)
+    makeProcWrapper("runDBJS", runDB)
 
     var ctx: JSContextRef # DONT DO THIS, THIS IS JUST AN EXAMPLE
     ctx.addToWindow("runDB", runDBJS)
-
+      
   if prc.kind == nnkClosedSymChoice:
     # Maybe print overloads also?
     "Proc passed has overloads, use `findProc` to narrow down to correct proc".error(prc)
     
   let impl = if prc.kind == nnkSym: prc.getImpl else: prc
+  if impl.kind notin {nnkProcDef, nnkLambda}:
+    "Expected a proc".error(prc)
+
   let 
     sym = impl[0]  
     paramsDecl = impl[3]
@@ -1872,67 +2063,105 @@ macro makeWrapper*(name: static[string], prc: typed, ignoreArgs: static[bool] = 
     ctxIdent = ident "ctx"
     argsIdent = ident "arguments"
     argCIdent = ident "argC"
+    thisIdent = ident "this"
     exceptionIdent = ident "exception" # Exception that is passed in has a parameter from javascript
     expectedIdent = ident "expected"
     
-  var paramConv = newStmtList()
-  var index = 0
+  var 
+    paramConv = newStmtList()
+    index = 0
+    insertedThisConv = false
+  let 
+    parameters = impl.parameters[1..^1]
+    # We are expecting 1 less param if its an object function since that param
+    # is passed from the `this` parameter
+    parametersCount = parameters.len + (if isObjFunc: -1 else: 0)
+  
   # Add a conversion of each parameter into a Nim type into the body
   # This converted variable will then be passed to the actual proc
-  for param in paramsDecl[1..^1]:
-    let
-      kind = ident $param[^2] # Type needs to be desymed so that it is passed as typedesc[]
-      defaultValue = param[^1]
-    if defaultValue.kind != nnkEmpty:
-      # TODO: Support default values
-      "Default values not supported".error(defaultValue)
-      
-    for name in param[0 ..< ^2]:
+  for param in parameters:
+      if param.defaultValue.kind != nnkEmpty:
+        "Default values are not supported".error(param.defaultValue)
+        
       let 
-        deSymedName = ident $name
-      call &= deSymedName
-      paramConv.add quote do:
-        when compiles(`ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)):
-          let `deSymedName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)
-          if not `exceptionIdent`.isNil:
-            # `JSExceptionIdent`[] = `exceptionIdent`
+        identName = ident param.name
+        kind = ident $param.kind # Desym kind so it is passed has typedesc
+      call &= identName
+      if (not insertedThisConv) and isObjFunc:
+        insertedThisConv = true
+        let test = ident "fromJSValue"
+        paramConv.add quote do:
+          let `identName` = `ctxIdent`.`test`(cast[JSValueRef](`thisIdent`), `kind`, `exceptionIdent`)
+          if not `exceptionIdent`[].isNil:
             return
-        else:
-          let `deSymedName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`)
+         
+      else:
+        paramConv.add quote do:
+          when compiles(`ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)):
+            let `identName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`, `exceptionIdent`)
+            if not `exceptionIdent`[].isNil:
+              return
+          else:
+            let `identName` = `ctxIdent`.fromJSValue(`argsIdent`[`index`], `kind`)
           
-      inc index
+        inc index
   if returnType.kind != nnkEmpty:
     # Convert back to JS type is needed
     call = quote do:
       return `ctxIdent`.toJSValue(`call`)  
-
+      
   let body = quote do:
+    # Check that the correct amount of args are passed
     when not bool(`ignoreArgs`):
-      if `argCIdent` != `index`: # Index will be same as count
-        const `expectedIdent` = `index`
+      if `argCIdent` != `parametersCount`: # Index will be same as count
+        const `expectedIdent` = `parametersCount`
         ctx.setJSException(fmt"Invalid arg count, excepted {expected} but got {argC}", `exceptionIdent`)
     `paramConv`
     `call`
-      
   # Signature of the proc that sent to the JS ctx
   let jsProcSig = makeSignature({
     $ctxIdent: "JSContextRef",
     "fun": "JSObjectRef",
-    "this": "JSObjectRef",
+    $thisIdent: "JSObjectRef",
     $argCIdent: "csize_t",
     $argsIdent: "UncheckedArray[JSValueRef]",
     $exceptionIdent: "JSException"
   }, returnType = "JSValueRef")
 
+
+  var prcName = ident name
+  if exportProc:
+    prcName = nnkPostFix.newTree(ident "*", prcName)
+    
   result = newProc(
-    ident name,
+    prcName,
     jsProcSig,
     body,
     pragmas = nnkPragma.newTree(
       ident "cdecl"
     )
   )
+
+proc evalScript*(ctx: JSContextRef, script: string): JSValueRef = 
+  ## Runs a script in the context and returns the result
+  let scriptStr = createJSString script
+  var exception: JSValueRef
+  result = ctx.evalScript(
+    scriptStr,
+    nil,
+    nil,
+    1,
+    addr exception
+  )
+  release scriptStr
+  if not exception.isNil:
+    ctx.throwNim exception
   
+
+proc evalScript*[T](ctx: JSContextRef, script: string, retType: typedesc[T]): T = 
+  ## Runs script and convert return value to a Nim type
+  result = ctx.fromJSValue(ctx.evalScript(script), retType)
+
 
 
 macro makeBinds*(procs: openArray[proc]) =
